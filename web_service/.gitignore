@@ -1,0 +1,7 @@
+data/
+__pycache__/
+*.db
+*.db-shm
+*.db-wal
+.db_key
+demo_log.txt

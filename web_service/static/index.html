@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>가계부 연동 자산관리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #F3F5F8; --surface: #FFFFFF; --ink: #1F2A37; --muted: #5B6778; --line: #D9DEE6;
+    --red: #C8372D; --jade: #2F7A6A; --slate: #3C5A99; --ochre: #A86B12; --focus: #3C5A99; --plum: #7B4FA0;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141A22; --surface: #1C2430; --ink: #E7ECF2; --muted: #9AA6B6; --line: #2E3947;
+      --red: #F0766B; --jade: #5FB8A4; --slate: #8FA8DE; --ochre: #E0A94A; --focus: #8FA8DE; --plum: #C4A0E6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #141A22; --surface: #1C2430; --ink: #E7ECF2; --muted: #9AA6B6; --line: #2E3947;
+    --red: #F0766B; --jade: #5FB8A4; --slate: #8FA8DE; --ochre: #E0A94A; --focus: #8FA8DE; --plum: #C4A0E6;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-size: 15px; line-height: 1.55;
+         font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* 상단 탭 */
+  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface);
+           border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1160px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 20px;
+         overflow-x: auto; }
+  .brand { font-weight: 700; white-space: nowrap; padding: 14px 0; }
+  @media (max-width: 520px) { .brand { display: none; } .bar { gap: 0; } }
+  [role="tablist"] { display: flex; gap: 4px; }
+  [role="tab"] { background: none; border: none; padding: 14px 10px 12px; border-bottom: 2px solid transparent;
+                 color: var(--muted); white-space: nowrap; }
+  [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+  .badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px;
+           background: var(--red); color: #fff; font-size: 11.5px; line-height: 18px; text-align: center; }
+
+  main { max-width: 1160px; margin: 0 auto; padding: 20px 16px 48px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  h2 { margin: 0 0 12px; font-size: 17px; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .toast { font-size: 13px; color: var(--jade); min-height: 1em; margin: 0; }
+  .error { color: var(--red); }
+
+  /* 홈 */
+  .home { display: grid; gap: 20px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home > .panel { padding: 18px; }
+  .home .wide { grid-column: 1 / -1; }
+  @media (max-width: 860px) { .home { grid-template-columns: 1fr; } }
+  .big { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .meter { height: 8px; background: var(--ground); border-radius: 4px; overflow: hidden; margin: 10px 0 6px; }
+  .meter > span { display: block; height: 100%; background: var(--jade); }
+  .meter.low > span { background: var(--red); }
+  .alert { border-left: 3px solid var(--ochre); padding: 10px 12px; border-radius: 0 8px 8px 0;
+           background: color-mix(in srgb, var(--ochre) 8%, transparent); }
+  .alert.danger { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
+  .linkish { background: none; border: none; padding: 0; color: var(--slate); text-decoration: underline;
+             text-underline-offset: 3px; }
+
+  /* 포트폴리오 표 */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 500; color: var(--muted); font-size: 13px; }
+  td.r, th.r { text-align: right; }
+  .gapscale { min-width: 220px; padding: 16px 10px 0; }
+  .gapbar { position: relative; height: 10px; background: var(--ground); border-radius: 5px; }
+  .gapbar .band { position: absolute; top: 0; bottom: 0; left: 25%; right: 25%;
+                  background: color-mix(in srgb, var(--jade) 18%, transparent); }
+  .gapbar .tick { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--muted); opacity: .45;
+                  transform: translateX(-.5px); }
+  .gapbar .tick.minor { top: 1px; bottom: 1px; opacity: .25; }
+  .gapbar .tick.zero { top: -5px; bottom: -5px; opacity: 1; width: 2px; background: var(--ink); transform: translateX(-1px); }
+  .gapbar .dot { position: absolute; top: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--ink);
+                 border: 2px solid var(--surface); transform: translateX(-50%); z-index: 1; }
+  .gapbar .dot.out { background: var(--red); }
+  .gapbar .dotval { position: absolute; bottom: 14px; transform: translateX(-50%); font-size: 11.5px; font-weight: 700;
+                    white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .gapbar .dotval.out { color: var(--red); }
+  .ticklabels { position: relative; height: 16px; margin-top: 6px; font-size: 10.5px; color: var(--muted);
+                font-variant-numeric: tabular-nums; }
+  .ticklabels span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .ticklabels span.zero { color: var(--ink); font-weight: 600; }
+  .ticklabels span.band { color: var(--jade); }
+  th .axis { display: flex; justify-content: space-between; font-size: 11.5px; min-width: 220px; padding: 0 10px; }
+  .scroll { overflow-x: auto; }
+  .hold-group { margin-bottom: 18px; }
+  table.holdings { table-layout: fixed; min-width: 720px; }
+  .hold-group h3 { margin: 0 0 6px; font-size: 15px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .hold-group h3 .muted { font-weight: 400; font-size: 13px; }
+  .pl-plus { color: var(--red); }       /* 국내 관례: 수익 빨강 */
+  .pl-minus { color: var(--slate); }    /* 손실 파랑 */
+  td .sub { display: block; font-size: 12px; color: var(--muted); }
+
+  /* 가계부 탭: 캘린더 + 입력 */
+  .ledger { display: grid; gap: 20px; grid-template-columns: minmax(0, 1.6fr) minmax(290px, 1fr); }
+  @media (max-width: 900px) { .ledger { grid-template-columns: 1fr; } }
+  .cal { padding: 20px 20px 16px; }
+  .cal-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .cal-head h1 small { font-size: 17px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+  .nav { margin-left: auto; display: flex; gap: 6px; }
+  .nav button, .secondary { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; }
+  .pressure { margin: 12px 0 16px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+  .dow { font-size: 13px; color: var(--muted); padding: 8px 6px; }
+  .dow.sun { color: var(--red); } .dow.sat { color: var(--slate); }
+  .day { min-height: 88px; border: none; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+         padding: 6px; text-align: left; background: none; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .day:nth-child(7n + 7) { border-right: none; }
+  .day.empty { cursor: default; }
+  .day .d { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .day.sun .d, .day.holiday .d { color: var(--red); }
+  .day.sat:not(.holiday) .d { color: var(--slate); }
+  .day.today .d { text-decoration: underline; text-underline-offset: 3px; }
+  .day[aria-pressed="true"] { background: color-mix(in srgb, var(--slate) 9%, transparent); }
+  .tag { font-size: 11.5px; line-height: 1.3; padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+         overflow: hidden; text-overflow: ellipsis; }
+  .k-공휴일, .k-대체공휴일 { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+  .k-명절 { color: #fff; background: var(--jade); }
+  .k-재정 { color: var(--slate); background: color-mix(in srgb, var(--slate) 12%, transparent); }
+  .k-사용자 { color: var(--ochre); background: color-mix(in srgb, var(--ochre) 14%, transparent); }
+  .k-us { color: var(--plum); background: color-mix(in srgb, var(--plum) 12%, transparent); }
+  .k-closed { color: var(--muted); background: color-mix(in srgb, var(--muted) 16%, transparent); font-weight: 600; }
+  .k-settle { color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+  @media (max-width: 560px) {
+    .day { min-height: 60px; padding: 4px; }
+    .day .tag { font-size: 0; padding: 0; height: 5px; border-radius: 3px; }
+    .day .k-공휴일, .day .k-대체공휴일 { background: var(--red); }
+    .day .k-재정 { background: var(--slate); }
+    .day .k-사용자 { background: var(--ochre); }
+    .day .k-us { background: var(--plum); }
+    .day .k-closed { background: var(--muted); }
+    .day .k-settle { background: var(--line); box-shadow: none; }
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .legend .toggle { margin-left: auto; display: flex; gap: 6px; align-items: center; color: var(--ink); }
+  .legend .toggle::before { display: none; }
+  .legend .toggle input { width: auto; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+                         margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .side { display: grid; gap: 20px; align-content: start; }
+  .side > section { padding: 18px; }
+  .events-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+  .events-list li { display: flex; gap: 8px; align-items: baseline; font-size: 14px; }
+  .events-list .amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .del { background: none; border: none; color: var(--muted); padding: 0 2px; }
+  form { display: grid; gap: 10px; }
+  label { display: grid; gap: 4px; font-size: 13.5px; color: var(--muted); }
+  input { background: var(--ground); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%;
+          color: var(--ink); }
+  input[type="number"], input.money { font-variant-numeric: tabular-nums; }
+  input.money { text-align: right; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+  .check input { width: auto; }
+  .primary { background: var(--ink); color: var(--surface); border: none; border-radius: 8px; padding: 10px; font-weight: 600; }
+  .result { font-size: 14px; display: grid; gap: 4px; padding-top: 4px; }
+  .result div { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .result .total { font-weight: 700; font-size: 16px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* 매매 제안 */
+  .proposal { padding: 18px; margin-bottom: 16px; }
+  .proposal header { position: static; background: none; border: none; display: flex; gap: 10px; align-items: baseline;
+                     flex-wrap: wrap; margin-bottom: 10px; }
+  .status { font-size: 13px; padding: 2px 8px; border-radius: 10px; background: var(--ground); }
+  .status.wait { background: color-mix(in srgb, var(--ochre) 16%, transparent); color: var(--ochre); }
+  .status.done { background: color-mix(in srgb, var(--jade) 16%, transparent); color: var(--jade); }
+  details { margin-top: 10px; font-size: 13px; }
+  details pre { white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+                background: var(--ground); padding: 10px; border-radius: 8px; max-height: 320px; overflow: auto; }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+  .sec { padding: 18px; margin-bottom: 16px; display: grid; gap: 10px; }
+  .sec .toast:empty { display: none; }
+  .sec-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .sec-row .kv { font-size: 14px; }
+  .sec-row .kv b { font-variant-numeric: tabular-nums; }
+  .halt { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+  .halt input { width: 140px; }
+  .danger-btn { background: var(--red); color: #fff; border: none; border-radius: 8px; padding: 9px 14px; font-weight: 600; }
+  .banner { padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--red) 12%, transparent);
+            color: var(--red); font-weight: 600; }
+  .meta { font-size: 12.5px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+  .meta code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .guard { margin-top: 10px; font-size: 13.5px; }
+  .guard.block { color: var(--red); }
+  .stepup { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .stepup input { width: 160px; }
+  .results { margin: 10px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+  /* 실시간 위험 감시 */
+  .mode-chip { margin-left: auto; white-space: nowrap; background: color-mix(in srgb, var(--red) 12%, transparent);
+               color: var(--red); border: none; border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 13px; }
+  .mon-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .mon-head h2 { margin: 0; }
+  .chip { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+  .chip.ok { color: var(--jade); background: color-mix(in srgb, var(--jade) 14%, transparent); }
+  .chip.on { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+  .chip.wait { color: var(--ochre); background: color-mix(in srgb, var(--ochre) 14%, transparent); }
+  .tcard.wait { border-color: var(--ochre); box-shadow: inset 3px 0 0 var(--ochre); }
+  .mon-head .secondary { margin-left: auto; }
+  .trig { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+  @media (max-width: 860px) { .trig { grid-template-columns: 1fr; } }
+  .tcard { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 6px; align-content: start; }
+  .tcard.on { border-color: var(--red); box-shadow: inset 3px 0 0 var(--red); }
+  .tcard h3 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+  .tcard .rule { font-size: 12px; color: var(--muted); }
+  .tcard .kv { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .tcard .kv span:first-child { color: var(--muted); }
+  .gauge { position: relative; height: 8px; background: var(--ground); border-radius: 4px; margin: 6px 0 18px; }
+  .gauge .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--jade); }
+  .gauge.bad .fill { background: var(--red); }
+  .gauge .mk { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+  .gauge .mk::after { content: attr(data-l); position: absolute; top: 100%; left: 50%; transform: translate(-50%, 2px);
+                      font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .modebox { margin-top: 14px; border-radius: 10px; padding: 14px; background: color-mix(in srgb, var(--red) 6%, transparent);
+             border: 1px solid color-mix(in srgb, var(--red) 30%, transparent); }
+  .modebox.calm { background: var(--ground); border-color: var(--line); }
+  .modebox h3 { margin: 0 0 8px; font-size: 15px; }
+  .modebox ul { margin: 0 0 10px; padding-left: 18px; font-size: 14px; }
+  .changed { font-weight: 700; color: var(--red); }
+
+  /* 일일 가계부 기록 */
+  .sub { margin: 4px 0 8px; font-size: 14px; font-weight: 600; }
+  .day .money { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .day .money.plus { color: var(--jade); }
+  .day .money.emg { color: var(--slate); }
+  @media (max-width: 560px) { .day .money { font-size: 10px; } }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg label { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 1px solid var(--line);
+               border-radius: 999px; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .seg input { width: auto; margin: 0; }
+  .seg label:has(input:checked) { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .events-list li.entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 8px; align-items: baseline;
+                          padding-bottom: 8px; border-bottom: 1px dashed var(--line); }
+  .events-list li.entry > span:nth-child(2) { overflow-wrap: anywhere; }
+  .events-list li.entry .ctl { grid-column: 2 / -1; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .entry-cls { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; width: auto;
+               background: var(--surface); }
+  .k-수입 { color: var(--jade); background: color-mix(in srgb, var(--jade) 12%, transparent); }
+  .k-지출 { color: var(--ink); background: var(--ground); }
+  .k-비상금 { color: var(--slate); background: color-mix(in srgb, var(--slate) 12%, transparent); }
+  .k-확인 { color: var(--ochre); background: color-mix(in srgb, var(--ochre) 14%, transparent); }
+  .result .irr { display: grid; grid-template-columns: 1fr; gap: 2px; font-size: 13px; padding: 6px 0;
+                 border-top: 1px dashed var(--line); }
+  .result .irr > div { display: flex; justify-content: space-between; gap: 8px; width: 100%; }
+  .result .irr .h { font-weight: 600; }
+  .result .irr span:first-child { color: var(--muted); }
+  .sumbox { font-size: 14px; display: grid; gap: 4px; background: var(--ground); border-radius: 8px; padding: 10px 12px;
+            margin-bottom: 14px; }
+  .sumbox div { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .sumbox .head { font-weight: 600; }
+  .sumbox button { justify-self: start; margin-top: 4px; }
+
+  /* 성향 진단 */
+  .diag { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: start; }
+  @media (max-width: 900px) { .diag { grid-template-columns: 1fr; } }
+  .diag > .panel { padding: 18px; }
+  fieldset { border: none; margin: 0 0 18px; padding: 0; }
+  legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
+  .q { margin-bottom: 16px; }
+  .q p { margin: 0 0 6px; font-weight: 500; }
+  .q .w { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .opts { display: grid; gap: 6px; }
+  .opt { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line);
+         border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--ink); }
+  .opt input { width: auto; margin: 0; }
+  .opt:has(input:checked) { border-color: var(--slate); background: color-mix(in srgb, var(--slate) 8%, transparent); }
+  select { font: inherit; color: var(--ink); background: var(--ground); border: 1px solid var(--line);
+           border-radius: 8px; padding: 8px 10px; width: 100%; }
+  .step { border-top: 1px solid var(--line); padding: 14px 0 4px; }
+  .step:first-of-type { border-top: none; padding-top: 0; }
+  .step h3 { margin: 0 0 8px; font-size: 15px; }
+  .calc { font-size: 14px; display: grid; gap: 4px; }
+  .calc div { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+  .calc div span:first-child { color: var(--muted); }
+  .calc .sum { font-weight: 700; border-top: 1px dashed var(--line); padding-top: 4px; }
+  .calc .sum span:first-child { color: var(--ink); }
+  .cap { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; border-radius: 6px; font-size: 14px; }
+  .cap.bind { background: color-mix(in srgb, var(--ochre) 12%, transparent); font-weight: 600; }
+  .scale { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); margin: 14px 0 26px; font-size: 11.5px; }
+  .scale > span { padding: 6px 4px; text-align: center; border-right: 1px solid var(--surface); color: var(--muted);
+                  background: var(--ground); }
+  .scale > span.on { background: var(--ink); color: var(--surface); font-weight: 600; }
+  .scale .mark { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--red); transform: translateX(-1px); }
+  .scale .mark::after { content: attr(data-v); position: absolute; top: 100%; left: 50%; transform: translate(-50%, 4px);
+                        font-size: 12px; color: var(--red); font-weight: 700; white-space: nowrap; }
+  .result-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
+  .demo-bar { background: color-mix(in srgb, var(--ochre) 16%, var(--surface)); color: var(--ink);
+    border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .demo-bar > div { max-width: 1180px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 12px;
+    align-items: center; flex-wrap: wrap; }
+  .demo-bar b { color: var(--ochre); }
+  .demo-bar button { margin-left: auto; font-size: 12.5px; padding: 4px 10px; }
+</style>
+</head>
+<body>
+<div class="demo-bar" id="demo-bar" role="note" hidden><div>
+  <span><b>시연용 데모</b> · 입력한 내용은 저장되지 않고, 지금 접속한 모든 사람이 같은 데이터를 함께 써요.
+    실제 금융 정보는 입력하지 마세요. 주문은 모의로만 처리돼요.</span>
+  <button type="button" class="secondary" id="demo-reset">처음 상태로 되돌리기</button>
+</div></div>
+<header>
+  <div class="bar">
+    <div class="brand">가계부 연동 자산관리</div>
+    <div role="tablist" aria-label="메뉴">
+      <button role="tab" id="tab-home" aria-controls="view-home" data-view="home">홈</button>
+      <button role="tab" id="tab-profile" aria-controls="view-profile" data-view="profile">성향 진단</button>
+      <button role="tab" id="tab-ledger" aria-controls="view-ledger" data-view="ledger">가계부</button>
+      <button role="tab" id="tab-portfolio" aria-controls="view-portfolio" data-view="portfolio">포트폴리오</button>
+      <button role="tab" id="tab-proposals" aria-controls="view-proposals" data-view="proposals">매매 제안<span class="badge" id="badge" hidden></span></button>
+    </div>
+    <button type="button" class="mode-chip" id="mode-chip" hidden>⚠ 목표 비중 조절 모드</button>
+  </div>
+</header>
+
+<main>
+  <!-- 홈 -->
+  <section id="view-home" role="tabpanel" aria-labelledby="tab-home">
+    <div class="home">
+      <div class="panel">
+        <h2>투자 등급</h2>
+        <div class="big" id="h-tier"></div>
+        <p class="hint" id="h-score"></p>
+      </div>
+      <div class="panel">
+        <h2>비상금 계좌</h2>
+        <div class="big num" id="h-emg"></div>
+        <div class="meter" id="h-meter"><span></span></div>
+        <p class="hint" id="h-emg-need"></p>
+      </div>
+      <div class="panel">
+        <h2>투자 자산</h2>
+        <div class="big num" id="h-total"></div>
+        <p class="hint" id="h-band"></p>
+      </div>
+      <div class="panel wide" id="h-monitor" aria-live="polite"></div>
+      <div class="panel wide" id="h-alerts"></div>
+    </div>
+  </section>
+
+  <!-- 성향 진단 -->
+  <section id="view-profile" role="tabpanel" aria-labelledby="tab-profile" hidden>
+    <div class="diag">
+      <form class="panel" id="dg-form" novalidate>
+        <fieldset>
+          <legend>1. 재무 체력</legend>
+          <div class="row">
+            <label>월 고정 수입(세후) <input id="dg-income" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required></label>
+            <label>월 비정기 수입(평균) <input id="dg-irr" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+          </div>
+          <div class="row">
+            <label>월 필수 지출 <input id="dg-ess" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required></label>
+            <label>월 대출 원리금 <input id="dg-debt" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+          </div>
+          <label>현재 현금성 자산 (예적금·CMA·파킹통장) <input id="dg-cash" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required></label>
+          <div class="row">
+            <label>소득 유형 <select id="dg-type"></select></label>
+            <label>비상금 준비 기간 <select id="dg-m"></select></label>
+          </div>
+        </fieldset>
+        <fieldset id="dg-qs"><legend>2. 투자 성향 설문</legend></fieldset>
+        <fieldset id="dg-goals">
+          <legend>3. 나이와 목표 시점 <span class="muted" style="font-weight:400;font-size:13px">(선택)</span></legend>
+          <p class="hint" style="margin-bottom:8px">목표까지 남은 기간이 짧을수록 그 목표에 쓸 돈은 더 안전하게 운용해요.
+            해마다 한 번 재평가할 때 남은 기간을 다시 계산해 등급과 비중을 조절합니다.</p>
+          <div class="row">
+            <label>출생 연도 <input id="gl-birth" type="number" inputmode="numeric" min="1900" placeholder="예: 1992"></label>
+            <label>은퇴 목표 나이 <input id="gl-retire" type="number" inputmode="numeric" min="30" max="90" placeholder="예: 60"></label>
+          </div>
+          <div class="row">
+            <label>주택 구입 목표 연도 <input id="gl-home-year" type="number" inputmode="numeric" placeholder="없으면 비움"></label>
+            <label>투자금 중 주택 자금 비율(%) <input id="gl-home-share" type="number" inputmode="decimal" min="0" max="100" placeholder="예: 30"></label>
+          </div>
+          <div class="row">
+            <label>기타 목표 이름 <input id="gl-other-name" maxlength="20" placeholder="예: 자녀 교육비"></label>
+            <label>목표 연도 <input id="gl-other-year" type="number" inputmode="numeric" placeholder="없으면 비움"></label>
+          </div>
+          <label>투자금 중 기타 목표 비율(%) <input id="gl-other-share" type="number" inputmode="decimal" min="0" max="100" placeholder="예: 10"></label>
+          <p class="hint" id="gl-hint" style="margin-top:6px"></p>
+        </fieldset>
+        <div class="actions">
+          <button class="secondary" type="submit">진단하기</button>
+          <button class="primary" type="button" id="dg-apply" disabled>내 등급으로 적용</button>
+        </div>
+        <p class="toast" id="dg-toast" role="status"></p>
+      </form>
+
+      <div class="panel" id="dg-result" aria-live="polite">
+        <p class="muted" style="margin:0">왼쪽을 채우고 <b>진단하기</b>를 누르면, 투자 등급이 정해지는 과정을 단계별로 보여드려요.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 가계부: 캘린더 내장 -->
+  <section id="view-ledger" role="tabpanel" aria-labelledby="tab-ledger" hidden>
+    <div class="ledger">
+      <div class="panel cal">
+        <div class="cal-head">
+          <h1 id="c-title"></h1>
+          <div class="nav">
+            <button type="button" id="c-prev">이전 달</button>
+            <button type="button" id="c-today">이번 달</button>
+            <button type="button" id="c-next">다음 달</button>
+          </div>
+        </div>
+        <p class="pressure" id="c-pressure"></p>
+        <div class="grid" id="c-grid" role="grid" aria-label="달력"></div>
+        <div class="legend">
+          <span style="--c: var(--red)">공휴일</span><span style="--c: var(--jade)">명절</span>
+          <span style="--c: var(--slate)">세금·공과금 납부</span><span style="--c: var(--ochre)">내 지출 일정</span>
+          <span style="--c: var(--plum)">미국 공휴일</span><span style="--c: var(--muted)">증시 휴장 (한·미)</span>
+          <label class="toggle"><input type="checkbox" id="c-show-us" checked> 미국 일정 표시</label>
+        </div>
+        <p class="hint" id="c-src" style="margin-top:8px"></p>
+        <p class="hint" id="c-msrc" style="margin-top:2px"></p>
+      </div>
+
+      <div class="side">
+        <section class="panel" aria-labelledby="d-title">
+          <h2 id="d-title"></h2>
+          <h3 class="sub">가계부 기록 <span class="muted num" id="d-net"></span></h3>
+          <ul class="events-list" id="d-entries"></ul>
+          <h3 class="sub">일정</h3>
+          <ul class="events-list" id="d-events"></ul>
+          <form id="ev-form">
+            <div class="seg" role="radiogroup" aria-label="기록 구분">
+              <label><input type="radio" name="ev-kind" value="expense" checked> 지출</label>
+              <label><input type="radio" name="ev-kind" value="income"> 수입</label>
+              <label><input type="radio" name="ev-kind" value="emg_in"> 비상금 적립</label>
+              <label><input type="radio" name="ev-kind" value="emg_out"> 비상금 인출</label>
+              <label><input type="radio" name="ev-kind" value="plan"> 지출 예정</label>
+            </div>
+            <label><span id="ev-name-label">내용 (가맹점·메모)</span>
+              <input id="ev-name" maxlength="40" placeholder="예: 이마트 장보기"></label>
+            <div class="row">
+              <label>날짜 <input id="ev-date" type="date" required></label>
+              <label>금액(원) <input id="ev-amount" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required></label>
+            </div>
+            <div class="row" id="ev-class-row">
+              <label>분류 <select id="ev-override"></select></label>
+              <label class="check" style="align-self:end"><input id="ev-remember" type="checkbox"> 같은 가맹점에 계속 적용</label>
+            </div>
+            <label class="check" id="ev-big-row" hidden><input id="ev-big" type="checkbox"> 목돈 지출 (지출일 30일 전부터 현금 확보 감시)</label>
+            <button class="primary" type="submit" id="ev-submit">기록 추가</button>
+            <p class="toast" id="ev-toast" role="status"></p>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="l-title">
+          <h2 id="l-title"></h2>
+          <div class="sumbox" id="l-sum"></div>
+          <form id="l-form">
+            <div class="row">
+              <label>월 확정 수입 <input id="l-income" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required></label>
+              <label>월 지출 합계 <input id="l-expense" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+            </div>
+            <div class="row">
+              <label>비정기 수입 <input id="l-irr" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+              <label>그중 사업·용역 소득 <input id="l-irr-tax" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" aria-describedby="l-irr-tax-hint"></label>
+            </div>
+            <p class="hint" id="l-irr-tax-hint" aria-live="polite"></p>
+            <label>그중 필수 고정 지출 <input id="l-essential" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0" required></label>
+            <div class="row">
+              <label>비상금 계좌 입금 <input id="l-dep" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+              <label>비상금 계좌 출금 <input id="l-wd" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+            </div>
+            <label>비상금 계좌 잔액 (비우면 자동 계산) <input id="l-bal" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></label>
+            <div class="result" aria-live="polite">
+              <div><span>순잉여금 (수입 − 지출)</span><span id="r-free">-</span></div>
+              <div><span>다음 달 대비 현금 적립</span><span id="r-reserve">-</span></div>
+              <div id="r-irr-box" class="irr" hidden></div>
+              <div class="total"><span>스마트 바이 투입 예정</span><span id="r-invest">-</span></div>
+            </div>
+            <p class="hint" id="r-note"></p>
+            <div class="actions">
+              <button class="secondary" type="submit">가계부 저장</button>
+              <button class="primary" type="button" id="l-close">월 마감 실행</button>
+            </div>
+            <p class="toast" id="l-toast" role="status"></p>
+          </form>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- 포트폴리오 -->
+  <section id="view-portfolio" role="tabpanel" aria-labelledby="tab-portfolio" hidden>
+    <div class="panel" style="padding:18px;margin-bottom:20px">
+      <h2>자산군별 비중</h2>
+      <p class="hint" id="p-hint" style="margin-bottom:10px"></p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>자산군</th><th class="r">평가액</th><th class="r">현재</th><th class="r">목표</th>
+                     <th class="r">오차</th><th>목표 대비 위치 (%p)<span class="axis"><span>← 미달</span><span>초과 →</span></span></th></tr></thead>
+          <tbody id="p-rows"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel" style="padding:18px">
+      <h2>보유 종목</h2>
+      <p class="hint" id="h-hint" style="margin-bottom:10px"></p>
+      <div id="p-holdings"></div>
+    </div>
+  </section>
+
+  <!-- 매매 제안 -->
+  <section id="view-proposals" role="tabpanel" aria-labelledby="tab-proposals" hidden>
+    <div id="pr-list"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const won = n => (n == null ? "-" : Math.round(n).toLocaleString("ko-KR") + "원");
+  const comma = n => (n == null || n === "" ? "" : Math.round(Number(n)).toLocaleString("ko-KR"));
+  const getMoney = id => { const d = $(id).value.replace(/[^0-9]/g, ""); return d === "" ? null : Number(d); };
+  const setMoney = (id, v) => { $(id).value = v == null || v === "" ? "" : comma(v); };
+  document.addEventListener("input", e => {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains("money")) return;
+    const pos = el.selectionStart, before = el.value.slice(0, pos).replace(/[^0-9]/g, "").length;
+    const digits = el.value.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "").slice(0, 15);
+    el.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+    let i = 0, seen = 0;                              // 입력 전 커서 앞 숫자 개수만큼 지나간 위치로 커서 복원
+    while (i < el.value.length && seen < before) { if (/\d/.test(el.value[i])) seen++; i++; }
+    el.setSelectionRange(i, i);
+  }, true);
+  const pad = n => String(n).padStart(2, "0");
+  const kindClass = k => k === "재정 일정" ? "k-재정" : k === "사용자 지출" ? "k-사용자" : "k-" + k;
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+    if (res.status === 204) return null;
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `요청이 실패했습니다 (${res.status})`);
+    return body;
+  }
+
+  let summary = null;
+  let today = new Date();
+  let view = null;          // 가계부 탭에서 보고 있는 달
+  let selected = null;      // 선택한 날짜 YYYY-MM-DD
+  let calData = null;
+
+  /* ── 탭 ─────────────────────────────────────── */
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(name) {
+    tabs.forEach(t => {
+      const on = t.dataset.view === name;
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      $("view-" + t.dataset.view).hidden = !on;
+    });
+    if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
+    if (name === "home") loadSummary().then(loadMonitor);
+    if (name === "profile") loadOnboarding();
+    if (name === "ledger") loadCalendar();
+    if (name === "portfolio") loadSummary().then(renderPortfolio);
+    if (name === "proposals") loadProposals();
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => show(t.dataset.view));
+    t.addEventListener("keydown", e => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const n = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      n.focus(); show(n.dataset.view);
+    });
+  });
+
+  /* ── 홈 ─────────────────────────────────────── */
+  async function loadSummary() {
+    summary = await api("/api/summary");
+    today = new Date(summary.today + "T00:00:00");
+    if (!view) { view = new Date(today.getFullYear(), today.getMonth(), 1); selected = summary.today; }
+    $("h-tier").textContent = `Tier ${summary.tier.level} ${summary.tier.name}`;
+    $("h-score").innerHTML = `위험 점수 ${summary.tier.score}점 · 등급별 목표 비중을 고정 유지합니다 ` +
+      `<button class="linkish" id="h-rediag">성향 다시 진단하기</button>`;
+    $("h-rediag").addEventListener("click", () => show("profile"));
+    const e = summary.emergency;
+    $("h-emg").textContent = won(e.balance);
+    const pct = e.required ? Math.min(100, e.balance / e.required * 100) : 100;
+    $("h-meter").className = "meter" + (e.balance < e.required ? " low" : "");
+    $("h-meter").firstElementChild.style.width = pct + "%";
+    $("h-emg-need").textContent = `필수 비상금 ${won(e.required)} 대비 ${pct.toFixed(0)}%`;
+    $("h-total").textContent = won(summary.portfolio.total);
+    const out = summary.portfolio.classes.filter(c => Math.abs(c.gap) >= summary.band);
+    $("h-band").textContent = out.length ? `±${summary.band}%p 이탈: ${out.map(c => c.name).join(", ")} → 리밸런싱 대상`
+                                         : `모든 자산군이 목표 ±${summary.band}%p 안에 있어요`;
+    const alerts = [];
+    if (summary.triggers.length) alerts.push(`<p class="alert danger">특수 상황 감지: ${summary.triggers.join(", ")}. 목표 비중 조절 모드가 작동 중이에요.</p>`);
+    const nm = summary.nextMonth;
+    if (nm.extra > 0) alerts.push(`<p class="alert">${Number(nm.period.slice(5))}월에 평소보다 <b class="num">${won(nm.extra)}</b> 더 쓸 것으로 보여요 (${esc(nm.why)}). 이번 달 순잉여금 일부를 현금으로 모아 둡니다. <button class="linkish" data-go="ledger">달력 보기</button></p>`);
+    const R = summary.reserves || {};
+    const pots = [["세금 대비", R.tax], ["다음 비정기 지출 대비", R.seasonal], ["목돈 지출 대기", R.expense]].filter(x => x[1] > 0);
+    if (pots.length || (R.irregularQueue || []).length)
+      alerts.push(`<p class="alert" style="border-left-color:var(--slate);background:color-mix(in srgb, var(--slate) 7%, transparent)">
+        따로 모아 둔 현금: ${pots.map(([n, v]) => `${n} <b class="num">${won(v)}</b>`).join(" · ") || "없음"}
+        ${(R.irregularQueue || []).length ? ` · 비정기 수입 분할 매수 예정 ${R.irregularQueue.length}회 (회당 ${won(R.irregularQueue[0])})` : ""}
+        <span class="hint" style="display:block">이 돈은 투자 비중 계산에서 빼고 파킹통장·CMA에 보관해요.</span></p>`);
+    if (summary.pendingProposals) alerts.push(`<p class="alert">승인을 기다리는 매매 제안이 ${summary.pendingProposals}건 있어요. <button class="linkish" data-go="proposals">매매 제안 보기</button></p>`);
+    $("h-alerts").innerHTML = `<h2>알림</h2>` + (alerts.join("") || `<p class="muted" style="margin:0">지금 확인할 알림이 없어요.</p>`);
+    $("h-alerts").querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go)));
+    const badge = $("badge");
+    badge.hidden = !summary.pendingProposals; badge.textContent = summary.pendingProposals;
+    return summary;
+  }
+
+  /* ── 실시간 위험 감시 ───────────────────────── */
+  const hm = iso => iso ? new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+  function gauge(value, max, marks, bad) {
+    const pct = v => Math.max(0, Math.min(100, v / max * 100));
+    return `<div class="gauge${bad ? " bad" : ""}" aria-hidden="true"><span class="fill" style="width:${pct(value)}%"></span>` +
+      marks.map(([v, l]) => `<span class="mk" style="left:${pct(v)}%" data-l="${l}"></span>`).join("") + `</div>`;
+  }
+  async function loadMonitor() {
+    const t = await api("/api/triggers");
+    const S = t.status, last = t.last, mode = t.mode;
+    const active = ["A", "B", "C"].filter(k => S[k].active);
+    const on = active.length > 0 || mode.adjusted || mode.restrictions.length > 0;
+    $("mode-chip").hidden = !on;
+    const A = S.A, B = S.B, C = S.C;
+    const waiting = T => T.active && (T.phase === "해제 대기" || T.phase === "B-2 부분 회복");
+    const card = (k, T, body) => {
+      const w = waiting(T), cls = !T.active ? "" : w ? " wait" : " on";
+      return `<div class="tcard${cls}"><h3>Trigger ${k} · ${T.name}
+        <span class="chip ${!T.active ? "ok" : w ? "wait" : "on"}">${!T.active ? "정상" : w ? "해제 대기" : "발동"}</span></h3>
+        <span class="rule">진입: ${esc(T.rule)}</span>
+        <span class="rule">해제: ${esc(T.release)}</span>${body}
+        ${T.active && T.progress ? `<div class="kv"><span>해제 진행</span><span>${esc(T.progress)}</span></div>` : ""}
+        ${T.reentryLevel ? `<span class="rule">재진입 반복으로 최소 유지 기간이 ${T.reentryLevel}단계 늘어난 상태예요.</span>` : ""}</div>`;
+    };
+    const cardA = card("A", A,
+      gauge(A.balance, Math.max(A.required * 1.5, A.balance, 1),
+        [[A.required, "필수 " + comma(A.required)]].concat(A.active ? [[A.releaseLine, "해제 105%"]] : []), A.active && !waiting(A)) +
+      `<div class="kv"><span>비상금 계좌 잔액</span><span>${won(A.balance)}</span></div>
+       <div class="kv"><span>필수 비상금</span><span>${won(A.required)}</span></div>
+       ${A.shortage ? `<div class="kv"><span>부족액</span><span class="error">${won(A.shortage)}</span></div>` : ""}
+       <span class="rule">잔액 기준: ${esc(A.source)}</span>`);
+    const bmax = Math.max(B.baseline * 1.3, B.buffer, 20);
+    const cardB = card("B", B,
+      gauge(Math.max(0, B.buffer), bmax, B.phase === "B-1" ? [[10, "10%"], [12, "해제 12%"]]
+        : B.phase.startsWith("B-2") ? [[B.half, "50%"], [B.baseline * 0.6, "60%"], [B.baseline * 0.85, "85%"]]
+        : [[10, "10%"], [B.half, "기준의 50%"]], B.active && !waiting(B)) +
+      `<div class="kv"><span>현재 Buffer</span><span>${B.buffer}%</span></div>
+       <div class="kv"><span>기준 Buffer (등급 판정 시)</span><span>${B.baseline}%</span></div>
+       <div class="kv"><span>수입 / 필수 지출</span><span>${comma(B.income)} / ${comma(B.essential)}</span></div>
+       ${B.active ? `<div class="kv"><span>단계</span><span class="error">${esc(B.level)}</span></div>` : ""}`);
+    const cardC = card("C", C,
+      gauge(C.cover, Math.max(C.upcoming * 1.3, C.cover, 1), C.upcoming ? [[C.upcoming, "지출 " + comma(C.upcoming)]]
+        .concat(C.active ? [[C.releaseLine, "해제 105%"]] : []) : [], C.active && !waiting(C)) +
+      `<div class="kv"><span>30일 안 목돈 지출</span><span>${C.upcoming ? won(C.upcoming) + ` (${ddayText(C.dday, C.businessDays)}${C.dueDate ? ` · ${mdLabel(C.dueDate)}` : ""})` : "없음"}</span></div>
+       <div class="kv"><span>대비 가능 현금</span><span>${won(C.cover)}</span></div>
+       ${C.reserved ? `<div class="kv"><span>확보해 둔 지출 대기 현금</span><span>${won(C.reserved)}</span></div>` : ""}
+       ${C.shortage ? `<div class="kv"><span>부족액</span><span class="error">${won(C.shortage)}</span></div>` : ""}`);
+    const modeBox = on ? `<div class="modebox">
+        <h3>⚙ 목표 비중 조절 모드 작동 중</h3>
+        ${mode.restrictions.length ? `<ul>${mode.restrictions.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+        <p class="hint" style="margin-bottom:8px">투자 등급: 원래 Tier ${mode.originalTier.level} ${esc(mode.originalTier.name)} → 현재 적용
+          <b>Tier ${mode.currentTier.level} ${esc(mode.currentTier.name)}</b>${mode.b1 ? " (B-1 전용 비중)" : mode.b2 ? " (B-2 하향)" : ""}</p>
+        <div class="scroll"><table><thead><tr><th>자산군</th><th class="r">원래 목표</th><th class="r">현재 적용 목표</th></tr></thead><tbody>
+          ${mode.targets.map(r => `<tr><td>${esc(r.name)}</td><td class="r num">${r.original}%</td>
+            <td class="r num ${Math.abs(r.original - r.current) > 0.05 ? "changed" : ""}">${r.current}%</td></tr>`).join("")}
+        </tbody></table></div>
+        <p class="hint" style="margin-top:8px">대응 매매가 필요하면 매매 제안 탭에 '트리거 대응' 제안이 만들어져요. 기준선을 벗어나도 해제 조건과 최소 유지 기간을 채울 때까지는 '해제 대기'로 유지돼요.</p>
+      </div>`
+      : `<div class="modebox calm"><h3 style="margin:0">평시 운용 중</h3>
+         <p class="hint" style="margin-top:6px">세 트리거 모두 정상이라 등급별 고정 목표 비중(Tier ${mode.currentTier.level})으로 스마트 바이·리밸런싱을 합니다.</p></div>`;
+    $("h-monitor").innerHTML = `
+      <div class="mon-head"><h2>실시간 위험 감시 (Trigger A·B·C)</h2>
+        <span class="chip ${on ? "on" : "ok"}">${on ? "조절 모드 작동" : "정상 감시 중"}</span>
+        <button class="secondary" type="button" id="scan-now">지금 스캔</button></div>
+      <p class="hint">마지막 스캔 ${last ? `${hm(last.at)} (${esc(last.source)})` : "없음"} · 다음 정기 스캔 ${hm(t.nextScheduled)}
+        · ${won(t.largeTxThreshold)} 이상 출금이나 비상금 인출을 기록하면 즉시 스캔</p>
+      <div class="trig">${cardA}${cardB}${cardC}</div>
+      ${modeBox}
+      <details style="margin-top:10px"><summary>최근 스캔 기록</summary>
+        <pre>${esc(t.history.map(h => `${hm(h.at)}  ${h.source}  → ${h.active.length ? h.active.map(k => "Trigger " + k).join(", ") + " 발동" : "정상"}`).join("\n") || "기록 없음")}</pre>
+        ${last ? `<pre>${esc(last.log.join("\n"))}</pre>` : ""}</details>
+      <p class="toast" id="scan-msg" role="status"></p>`;
+    $("scan-now").addEventListener("click", async () => {
+      $("scan-now").disabled = true;
+      const r = await api("/api/triggers/scan", { method: "POST", body: JSON.stringify({ source: "manual" }) });
+      await loadSummary(); await loadMonitor();
+      $("scan-msg").innerHTML = r.result.proposalId
+        ? `스캔했어요. 대응 매매 제안을 만들었어요. <button class="linkish" id="go-pr2">매매 제안 보기</button>`
+        : `스캔했어요: ${r.result.active.length ? r.result.active.map(k => "Trigger " + k).join(", ") + " 발동" : "모두 정상"}`;
+      const g = $("go-pr2"); if (g) g.addEventListener("click", () => show("proposals"));
+    });
+  }
+  $("mode-chip").addEventListener("click", () => show("home"));
+
+  /* ── 포트폴리오 ─────────────────────────────── */
+  function gapScale(gap, x, outside, clipped, band) {
+    // 눈금: -10 ~ +10%p (2.5%p 간격, 5%p마다 숫자). 초록 영역 = 목표 ±band%p
+    const ticks = [];
+    for (let v = -10; v <= 10; v += 2.5) {
+      const pos = 50 + v * 5;
+      const cls = v === 0 ? "zero" : Number.isInteger(v / 5) ? "" : "minor";
+      ticks.push(`<span class="tick ${cls}" style="left:${pos}%"></span>`);
+    }
+    const labels = [-10, -5, 0, 5, 10].map(v =>
+      `<span class="${v === 0 ? "zero" : Math.abs(v) === band ? "band" : ""}" style="left:${50 + v * 5}%">${v > 0 ? "+" : ""}${v}</span>`).join("");
+    const val = `${gap > 0 ? "+" : ""}${gap}${clipped ? (gap > 0 ? " ▶" : " ◀") : ""}`;
+    const state = Math.abs(gap) < 0.05 ? "목표와 같음" : gap > 0 ? `목표보다 ${gap}%p 초과` : `목표보다 ${-gap}%p 미달`;
+    return `<div class="gapscale" role="img" aria-label="${state}${outside ? `, 리밸런싱 기준 ±${band}%p 이탈` : ""}">
+      <div class="gapbar"><span class="band"></span>${ticks.join("")}
+        <span class="dotval${outside ? " out" : ""}" style="left:${x}%;transform:translateX(${x > 88 ? "-100%" : x < 12 ? "0" : "-50%"})">${val}</span>
+        <span class="dot${outside ? " out" : ""}" style="left:${x}%"></span></div>
+      <div class="ticklabels" aria-hidden="true">${labels}</div></div>`;
+  }
+
+  function renderPortfolio() {
+    const band = summary.band;
+    $("p-hint").textContent = `가운데 0이 목표 비중이에요. 점이 오른쪽이면 초과, 왼쪽이면 미달이고, 초록 영역(±${band}%p)을 벗어나면 빨간 점으로 표시되며 매도·매수 리밸런싱 대상이 돼요. 그 안의 오차는 매달 순잉여금으로 채웁니다. 눈금 범위(±10%p)를 넘으면 점이 끝에 붙고 화살표로 표시돼요.`;
+    $("p-rows").innerHTML = summary.portfolio.classes.map(c => {
+      const x = Math.max(0, Math.min(100, 50 + c.gap * 5));   // ±10%p → 0~100%
+      const outside = Math.abs(c.gap) >= band;
+      const clipped = Math.abs(c.gap) > 10;
+      return `<tr><td>${esc(c.name)}</td><td class="r num">${won(c.value)}</td><td class="r num">${c.current}%</td>
+        <td class="r num">${c.target}%</td><td class="r num${outside ? " error" : ""}">${c.gap > 0 ? "+" : ""}${c.gap}%p</td>
+        <td>${gapScale(c.gap, x, outside, clipped, band)}</td></tr>`;
+    }).join("");
+  
+    renderHoldings();
+  }
+
+  const qtyFmt = q => Number(q).toLocaleString("ko-KR", { maximumFractionDigits: Number.isInteger(Number(q)) ? 0 : 4 });
+  function renderHoldings() {
+    const groups = summary.holdings;
+    const total = summary.portfolio.total;
+    $("h-hint").textContent = "현재가는 최근 조회 가격 기준이에요. 평가손익은 (현재가 − 평균 매수가) × 보유 수량이고, 수익은 빨강, 손실은 파랑으로 표시해요.";
+    if (!groups.length) { $("p-holdings").innerHTML = `<p class="muted">보유 종목이 없어요.</p>`; return; }
+    $("p-holdings").innerHTML = groups.map(g => {
+      const pl = g.items.reduce((s, h) => s + h.profit, 0);
+      return `<section class="hold-group"><h3>${esc(g.assetClass)}
+          <span class="muted num">${won(g.value)} · 전체의 ${(g.value / total * 100).toFixed(1)}%${g.assetClass !== "현금성자산" ? ` · 평가손익 <span class="${pl >= 0 ? "pl-plus" : "pl-minus"}">${pl >= 0 ? "+" : ""}${won(pl)}</span>` : ""}</span></h3>
+        <div class="scroll"><table class="holdings">
+          <colgroup><col style="width:26%"><col style="width:8%"><col style="width:11%"><col style="width:13%">
+            <col style="width:13%"><col style="width:15%"><col style="width:14%"></colgroup>
+          <thead><tr><th>종목</th><th>계좌</th><th class="r">보유 수량</th><th class="r">평균 매수가</th>
+            <th class="r">현재가</th><th class="r">평가액</th><th class="r">평가손익</th></tr></thead>
+          <tbody>${g.items.map(h => h.cash
+            ? `<tr><td>${esc(h.name)}<span class="sub">${esc(h.ticker)}</span></td><td>${esc(h.account)}</td>
+                 <td class="r muted" colspan="3">잔액</td><td class="r num">${won(h.value)}</td><td class="r muted">-</td></tr>`
+            : `<tr><td>${esc(h.name)}<span class="sub">${esc(h.ticker)}${h.locked ? " · 매도 금지" : ""}</span></td><td>${esc(h.account)}</td>
+                 <td class="r num">${qtyFmt(h.quantity)}${h.fractional ? "개" : "주"}</td>
+                 <td class="r num">${won(h.avgPrice)}</td><td class="r num">${won(h.price)}</td>
+                 <td class="r num">${won(h.value)}</td>
+                 <td class="r num ${h.profit >= 0 ? "pl-plus" : "pl-minus"}">${h.profit >= 0 ? "+" : ""}${won(h.profit)}
+                   <span class="sub">${h.profitPct >= 0 ? "+" : ""}${h.profitPct.toFixed(2)}%</span></td></tr>`).join("")}
+          </tbody></table></div></section>`;
+    }).join("");
+  }
+
+  /* ── 가계부 (캘린더) ────────────────────────── */
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const period = () => `${view.getFullYear()}-${pad(view.getMonth() + 1)}`;
+
+  async function loadCalendar() {
+    if (!summary) await loadSummary();
+    calData = await api(`/api/calendar?year=${view.getFullYear()}&month=${view.getMonth() + 1}`);
+    renderCalendar(); renderDay(); renderLedgerForm();
+  }
+
+  // ── 한국·미국 공휴일과 증시 휴장일 (정산일·매도 후보·매수 집행일 계산에 쓰는 달력과 같은 데이터) ──
+  // D-Day는 달력 기준(감시 기간 30일)과 남은 영업일(휴장일 제외)을 함께 보여 줌
+  function ddayText(dday, bdays) {
+    if (dday == null) return "";
+    return (dday === 0 ? "D-Day" : `D-${dday}`) + (bdays != null ? ` · 영업일 ${bdays}일` : "");
+  }
+  const showUS = () => $("c-show-us").checked;
+  const mdLabel = s => { const d = new Date(s + "T00:00"); return `${d.getMonth() + 1}/${d.getDate()}(${"일월화수목금토"[d.getDay()]})`; };
+  function marketOn(key) {
+    return (calData.market || []).filter(e => e.date === key && (e.market === "KR" || showUS()));
+  }
+  function marketTags(mk, evs) {
+    const krOnly = mk.filter(e => e.market === "KR" && e.kind === "휴장" && !evs.some(x => x.name === e.name));
+    const usHol = mk.filter(e => e.market === "US" && (e.kind === "공휴일" || e.kind === "기념일"));
+    const closed = ["KR", "US"].filter(m => mk.some(e => e.market === m && e.kind === "휴장"));
+    const settle = mk.find(e => e.kind === "결제 휴무");
+    const names = closed.map(m => m === "KR" ? "KOR" : "US").join(", ");
+    return krOnly.map(e => `<span class="tag k-closed" title="한국 증시 ${esc(e.name)}">${esc(e.name)}</span>`).join("") +
+      usHol.map(e => `<span class="tag k-us" title="미국 ${esc(e.name)}">US ${esc(e.name)}</span>`).join("") +
+      (closed.length ? `<span class="tag k-closed" title="${closed.map(m => m === "KR" ? "한국" : "미국").join("·")} 증시 휴장 — 주문·정산 없음">휴장: ${names}</span>` : "") +
+      (settle ? `<span class="tag k-settle" title="${esc(settle.name)}">미 결제휴무</span>` : "");
+  }
+  function marketLabel(mk) {
+    const out = [];
+    mk.forEach(e => {
+      const who = e.market === "KR" ? "한국" : "미국";
+      out.push(e.kind === "휴장" ? `${who} 증시 휴장(${e.name})` : e.kind === "결제 휴무" ? "미국 결제 휴무"
+        : `미국 ${e.name}`);
+    });
+    return out.join(", ");
+  }
+  $("c-show-us").addEventListener("change", () => { renderCalendar(); renderDay(); });
+
+  function renderCalendar() {
+    $("c-title").innerHTML = `${view.getFullYear()}<small>년</small> ${view.getMonth() + 1}<small>월</small>`;
+    $("c-src").textContent = calData.source ? `공휴일·명절 출처: ${calData.source}` : "";
+    $("c-msrc").textContent = calData.marketSource ? `증시 휴장일: ${calData.marketSource.replace(/^한국 휴장일: /, "한국 ")}` : "";
+    const nm = calData.nextMonth, bigs = calData.events.filter(e => e.big);
+    const p = $("c-pressure");
+    if (nm.extra > 0) {
+      p.className = "pressure alert";
+      p.innerHTML = `다음 달(${Number(nm.period.slice(5))}월)에 평소보다 <b class="num">${won(nm.extra)}</b> 더 쓸 것으로 보여요 (${esc(nm.why)}). 이번 달 순잉여금에서 미리 현금으로 모아 둡니다.`;
+    } else if (bigs.length) {
+      p.className = "pressure alert";
+      p.innerHTML = `이번 달 목돈 지출: ${bigs.map(b => `${esc(b.name)} <b class="num">${won(b.amount)}</b>` +
+        (b.dday != null ? ` <span class="muted num">(${ddayText(b.dday, b.bdays)})</span>` : "")).join(", ")}.
+        지출일 30일 전부터 현금 확보를 감시하고, 매도는 휴장일을 반영해 지출일 전에 대금이 들어오는 자산만 골라요.`;
+    } else {
+      p.className = "pressure muted";
+      p.textContent = "다음 달에 예정된 큰 비정기 지출이 없어요. 순잉여금은 모두 스마트 바이에 투입됩니다.";
+    }
+    const grid = $("c-grid");
+    grid.innerHTML = ["일", "월", "화", "수", "목", "금", "토"].map((d, i) =>
+      `<div class="dow${i === 0 ? " sun" : i === 6 ? " sat" : ""}" role="columnheader">${d}</div>`).join("");
+    const first = new Date(view.getFullYear(), view.getMonth(), 1);
+    const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+    for (let i = 0; i < first.getDay(); i++) grid.insertAdjacentHTML("beforeend", `<div class="day empty"></div>`);
+    for (let d = 1; d <= days; d++) {
+      const date = new Date(view.getFullYear(), view.getMonth(), d), key = ymd(date);
+      const evs = calData.events.filter(e => e.date === key);
+      const dayEntries = calData.entries.filter(e => e.date === key);
+      const parts = dayParts(dayEntries);
+      const holiday = evs.some(e => ["공휴일", "명절", "대체공휴일"].includes(e.kind));
+      const mk = marketOn(key), mkHtml = marketTags(mk, evs), mkLabel = marketLabel(mk);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "day" + (date.getDay() === 0 ? " sun" : date.getDay() === 6 ? " sat" : "") +
+        (holiday ? " holiday" : "") + (key === summary.today ? " today" : "");
+      b.setAttribute("aria-pressed", String(key === selected));
+      b.setAttribute("aria-label", `${view.getMonth() + 1}월 ${d}일${evs.length ? ", " + evs.map(e => e.name).join(", ") : ""}` +
+        (mkLabel ? ", " + mkLabel : "") +
+        (parts.hasNormal ? `, 수입·지출 합계 ${won(parts.net)}` : "") +
+        (parts.emgIn ? `, 비상금 적립 ${won(parts.emgIn)}` : "") + (parts.emgOut ? `, 비상금 인출 ${won(parts.emgOut)}` : ""));
+      b.innerHTML = `<span class="d">${d}</span>` + evs.map(e =>
+        `<span class="tag ${kindClass(e.kind)}" title="${esc(e.name)}">${esc(e.name)}${e.amount ? " " + won(e.amount) : ""}</span>`).join("") +
+        mkHtml + dayMoneyHtml(parts);
+      b.addEventListener("click", () => { selected = key; $("ev-date").value = key; renderCalendar(); renderDay(); });
+      grid.appendChild(b);
+    }
+  }
+
+  const CLS_OPTIONS = {
+    expense: [["auto", "자동 분류"], ["essential", "필수 지출"], ["nonessential", "비필수 지출"], ["exclude", "집계 제외"]],
+    income: [["auto", "자동 분류"], ["regular", "정기 수입"], ["irregular", "비정기 수입"], ["exclude", "집계 제외"]],
+  };
+  const clsTag = c => c.includes("수입") ? "k-수입" : c.startsWith("비상금") ? "k-비상금" : "k-지출";
+  function dayNet(list) {       // 비상금 이체·집계 제외 기록은 수입·지출이 아니므로 제외
+    return list.filter(e => !e.class.startsWith("비상금") && e.class !== "집계 제외")
+               .reduce((s, e) => s + (e.kind === "income" ? e.amount : -e.amount), 0);
+  }
+  function dayParts(list) {
+    const normal = list.filter(e => !e.class.startsWith("비상금") && e.class !== "집계 제외");
+    const emg = list.filter(e => e.class.startsWith("비상금"));
+    return { hasNormal: normal.length > 0, net: dayNet(list), hasEmg: emg.length > 0,
+             emgIn: emg.filter(e => e.class === "비상금 적립").reduce((s, e) => s + e.amount, 0),
+             emgOut: emg.filter(e => e.class === "비상금 인출").reduce((s, e) => s + e.amount, 0) };
+  }
+  const signed = n => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(Math.round(n)).toLocaleString("ko-KR")}`;
+  function dayMoneyHtml(p) {
+    let h = "";
+    if (p.hasNormal) h += `<span class="money${p.net > 0 ? " plus" : ""}">${signed(p.net)}</span>`;
+    if (p.emgIn) h += `<span class="money emg">비상금 +${Math.round(p.emgIn).toLocaleString("ko-KR")}</span>`;
+    if (p.emgOut) h += `<span class="money emg">비상금 −${Math.round(p.emgOut).toLocaleString("ko-KR")}</span>`;
+    return h;
+  }
+
+  function renderDay() {
+    if (!selected.startsWith(period())) selected = `${period()}-01`;
+    const [, m, d] = selected.split("-").map(Number);
+    $("d-title").textContent = `${m}월 ${d}일`;
+    $("ev-date").value = $("ev-date").value || selected;
+
+    const ents = calData.entries.filter(e => e.date === selected);
+    const pd = dayParts(ents), bits = [];
+    if (pd.hasNormal) bits.push(`수입·지출 ${signed(pd.net)}원`);
+    if (pd.emgIn) bits.push(`비상금 적립 ${won(pd.emgIn)}`);
+    if (pd.emgOut) bits.push(`비상금 인출 ${won(pd.emgOut)}`);
+    $("d-net").textContent = bits.length ? `(${bits.join(" · ")})` : "";
+    const el = $("d-entries");
+    el.innerHTML = ents.length ? "" : `<li class="muted">이 날 기록이 없어요.</li>`;
+    ents.forEach(e => {
+      const li = document.createElement("li");
+      li.className = "entry";
+      const review = e.confidence === "확인 필요";
+      const opts = e.class.startsWith("비상금") ? null : CLS_OPTIONS[e.kind];
+      li.innerHTML = `<span class="tag ${review ? "k-확인" : clsTag(e.class)}" title="${esc(e.label)} · ${esc(e.confidence)}">${esc(e.class)}${review ? "?" : ""}</span>` +
+        `<span>${esc(e.description)}</span><span class="amt">${e.kind === "income" ? "+" : "−"}${won(e.amount)}</span>`;
+      const ctl = document.createElement("div");
+      ctl.className = "ctl";
+      li.appendChild(ctl);
+      if (opts) {
+        const sel = document.createElement("select");
+        sel.className = "entry-cls"; sel.setAttribute("aria-label", `${e.description} 분류 변경`);
+        sel.innerHTML = opts.map(([v, t]) => `<option value="${v}" ${e.override === v ? "selected" : ""}>${t}</option>`).join("");
+        sel.addEventListener("change", async () => {
+          const remember = sel.value !== "auto" && sel.value !== "exclude" &&
+            confirm(`'${e.description}' 가맹점에 앞으로도 이 분류를 적용할까요?`);
+          await api(`/api/entries/${e.id}`, { method: "PATCH", body: JSON.stringify({ override: sel.value, remember }) });
+          loadCalendar();
+        });
+        ctl.appendChild(sel);
+      }
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "del"; del.textContent = "삭제"; del.setAttribute("aria-label", `${e.description} 삭제`);
+      del.addEventListener("click", async () => { await api(`/api/entries/${e.id}`, { method: "DELETE" }); loadCalendar(); });
+      ctl.appendChild(del);
+      el.appendChild(li);
+    });
+
+    const evs = calData.events.filter(e => e.date === selected);
+    const mk = marketOn(selected);
+    const list = $("d-events");
+    list.innerHTML = evs.length || mk.length ? "" : `<li class="muted">일정이 없어요.</li>`;
+    evs.forEach(e => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="tag ${kindClass(e.kind)}">${e.kind === "사용자 지출" ? (e.big ? "목돈" : "예정") : esc(e.kind)}</span>` +
+        `<span>${esc(e.name)}${e.dday != null ? ` <span class="muted num" style="font-size:12.5px">${ddayText(e.dday, e.bdays)}</span>` : ""}</span>` +
+        `<span class="amt">${e.amount ? won(e.amount) : ""}</span>`;
+      if (e.id != null) {
+        const del = document.createElement("button");
+        del.type = "button"; del.className = "del"; del.textContent = "삭제";
+        del.setAttribute("aria-label", `${e.name} 삭제`);
+        del.addEventListener("click", async () => { await api(`/api/events/${e.id}`, { method: "DELETE" }); loadCalendar(); });
+        li.appendChild(del);
+      }
+      list.appendChild(li);
+    });
+    mk.forEach(e => {
+      const li = document.createElement("li");
+      const who = e.market === "KR" ? "한국" : "미국";
+      const [cls, label] = e.kind === "휴장" ? ["k-closed", `${who} 증시 휴장`] : e.kind === "결제 휴무" ? ["k-settle", "미국 결제 휴무"]
+        : ["k-us", e.kind === "공휴일" ? "미국 공휴일" : "미국 기념일"];
+      li.innerHTML = `<span class="tag ${cls}">${label}</span><span>${esc(e.name)}</span>`;
+      list.appendChild(li);
+    });
+    if (mk.some(e => e.kind === "휴장" || e.kind === "결제 휴무"))
+      list.insertAdjacentHTML("beforeend", `<li class="muted" style="font-size:12.5px">휴장·결제 휴무일은 T+N 정산일, 목돈 마련 매도 후보, 매수 집행일 계산에서 빠져요.</li>`);
+  }
+
+  function formKind() { return document.querySelector('input[name="ev-kind"]:checked').value; }
+  function syncForm() {
+    const k = formKind();
+    $("ev-big-row").hidden = k !== "plan";
+    $("ev-class-row").hidden = !(k === "expense" || k === "income");
+    $("ev-name-label").textContent = k === "plan" ? "예정된 지출 이름" : k.startsWith("emg") ? "메모 (선택)" : "내용 (가맹점·메모)";
+    $("ev-name").placeholder = { expense: "예: 이마트 장보기", income: "예: 중고거래 판매", emg_in: "예: 월급날 적립",
+                                 emg_out: "예: 병원비", plan: "예: 부모님 설 선물" }[k];
+    $("ev-submit").textContent = k === "plan" ? "지출 일정 추가" : "기록 추가";
+    if (CLS_OPTIONS[k]) $("ev-override").innerHTML = CLS_OPTIONS[k].map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  }
+  document.querySelectorAll('input[name="ev-kind"]').forEach(r => r.addEventListener("change", syncForm));
+  syncForm();
+
+  function renderLedgerSum() {
+    const S = calData.entrySummary;
+    $("l-sum").innerHTML = S.count ? `
+      <div class="head"><span>이번 달 기록 ${S.count}건 합계</span><span>${S.net > 0 ? "+" : ""}${won(S.net)}</span></div>
+      <div><span>정기 수입</span><span>${won(S.confirmedIncome)}</span></div>
+      <div><span>비정기 수입${S.irregularTaxable ? ` (사업·용역 ${won(S.irregularTaxable)})` : ""}</span><span>${won(S.irregularIncome)}</span></div>
+      <div><span>지출 합계 (필수 ${won(S.essentialExpense)})</span><span>${won(S.totalExpense)}</span></div>
+      <div><span>비상금 적립 / 인출</span><span>${won(S.emergencyDeposit)} / ${won(S.emergencyWithdrawal)}</span></div>
+      ${S.needsReview ? `<div class="muted"><span>분류 확인이 필요한 기록</span><span>${S.needsReview}건</span></div>` : ""}
+      <button class="secondary" type="button" id="l-fill">기록 합계로 아래 칸 채우기</button>
+      <p class="hint">비정기 수입은 등급·트리거 판단에는 넣지 않고, 비상금 → 예정 지출 → 세금 몫 → 투자 순서로 배분해요.</p>`
+      : `<p class="hint">아직 이번 달 기록이 없어요. 달력에서 날짜를 누르고 매일의 수입·지출을 기록하면 여기에 자동으로 모여요.</p>`;
+    const f = $("l-fill");
+    if (f) f.addEventListener("click", () => {
+      if (S.confirmedIncome > 0) setMoney("l-income", S.confirmedIncome);
+      setMoney("l-expense", S.totalExpense); setMoney("l-essential", S.essentialExpense);
+      setMoney("l-dep", S.emergencyDeposit || ""); setMoney("l-wd", S.emergencyWithdrawal || "");
+      setMoney("l-irr", S.irregularIncome || ""); setMoney("l-irr-tax", S.irregularTaxable || "");
+      formDirty = true;
+      $("l-irr").dispatchEvent(new Event("input", { bubbles: true }));   // 비정기 수입 배분 미리보기 갱신
+      localPreview();
+      $("l-toast").className = "toast"; $("l-toast").textContent = "기록 합계를 채웠어요. 확인 후 '가계부 저장'을 눌러 주세요.";
+    });
+  }
+
+  let formPeriod = null, formDirty = false;       // 저장 전 입력값이 기록 추가 등으로 지워지지 않도록
+  $("l-form").addEventListener("input", () => { formDirty = true; });
+  function renderLedgerForm() {
+    renderLedgerSum();
+    $("l-title").textContent = `${view.getFullYear()}년 ${view.getMonth() + 1}월 가계부`;
+    if (formPeriod === period() && formDirty) { localPreview(); return; }
+    formPeriod = period(); formDirty = false;
+    const L = calData.ledger || {};
+    const set = (id, v) => setMoney(id, v);
+    set("l-income", L.monthly_income); set("l-expense", L.total_expense); set("l-essential", L.essential_expense);
+    set("l-dep", L.emergency_deposit); set("l-wd", L.emergency_withdrawal); set("l-bal", L.emergency_balance);
+    set("l-irr", L.irregular_income); set("l-irr-tax", L.irregular_taxable);
+    renderPreview(calData.preview);
+  }
+
+  function localPreview() {
+    const v = id => getMoney(id) || 0;
+    const free = v("l-income") - Math.max(v("l-expense"), v("l-essential"));
+    const nm = calData.nextMonth;
+    const reserve = free > 0 && nm.extra > 0 ? Math.min(nm.extra, free * calData.maxHold) : 0;
+    renderPreview({ freeCash: free, reserve, invest: Math.max(0, free - reserve),
+      note: reserve > 0 ? `다음 달 예상 초과 지출 ${won(nm.extra)}(${nm.why}) 중 순잉여금의 최대 ${Math.round(calData.maxHold * 100)}%까지 현금으로 모읍니다.` : "" });
+  }
+  // 사업·용역 소득 칸: 적은 금액이 어떻게 쓰이는지 바로 보여 줌
+  const taxRatio = () => (calData && calData.taxRatio != null ? calData.taxRatio : 0.15);
+  const taxPct = () => Math.round(taxRatio() * 100);
+  function syncTaxHint(actualTax) {
+    const h = $("l-irr-tax-hint"), irr = getMoney("l-irr") || 0, t = getMoney("l-irr-tax") || 0;
+    h.className = "hint";
+    if (t > irr) {
+      h.className = "hint error";
+      h.textContent = "사업·용역 소득은 위의 비정기 수입보다 클 수 없어요. 비정기 수입 중 일부만 적어 주세요.";
+      return;
+    }
+    if (!t) {
+      h.textContent = `외주·강의료·원고료처럼 나중에 종합소득세를 신고할 돈이 있으면 적어 주세요. ` +
+        `적은 금액의 ${taxPct()}%를 세금 낼 돈으로 먼저 떼어 둬요. 용돈·중고거래처럼 해당 없으면 비워 두세요.`;
+      return;
+    }
+    const want = Math.round(t * taxRatio());
+    let msg = `→ ${won(t)}의 ${taxPct()}%인 ${won(want)}을 5월 종합소득세 낼 돈으로 떼어 두고, 투자에는 넣지 않아요.`;
+    if (actualTax != null && actualTax < want)
+      msg += ` 이번 달은 비상금·예정 지출을 먼저 채워서 ${won(actualTax)}만 떼어 둘 수 있어요.`;
+    h.textContent = msg + " (대비금일 뿐, 정확한 세금은 신고 때 정해져요.)";
+  }
+  ["l-irr", "l-irr-tax"].forEach(id => $(id).addEventListener("input", () => syncTaxHint()));
+
+  function renderPreview(p) {
+    const box = $("r-irr-box"), I = p && p.irregular;
+    syncTaxHint(I ? I.tax : null);
+    if (I && (I.amount > 0 || I.queued > 0)) {
+      const row = (a, b) => b > 0 ? `<div><span>${a}</span><span>${won(b)}</span></div>` : "";
+      box.innerHTML = `<div class="h"><span>비정기 수입 배분</span><span>${won(I.amount)}</span></div>` +
+        row("① 비상금 부족분", I.emergency) + row("② 예정된 목돈 지출", I.upcoming) + row("② 다음 달 비정기 지출 대비", I.seasonal) +
+        row(`③ 세금 몫 (종합소득세 대비 ${taxPct()}%)`, I.tax) + row("④ 이번 달 투자", I.investNow) +
+        (I.investLater.length ? `<div><span>④ 다음 ${I.investLater.length}개월 분할 투자</span><span>${won(I.investLater[0])}씩</span></div>` : "") +
+        row("지난 비정기 수입 분할 매수분", I.queued);
+      box.hidden = false;
+    } else { box.hidden = true; }
+    $("r-free").textContent = p ? won(p.freeCash) : "-";
+    $("r-reserve").textContent = p ? won(p.reserve) : "-";
+    $("r-invest").textContent = p ? won(p.invest) : "-";
+    $("r-note").textContent = p && p.note ? p.note : "필수 지출은 재무 잉여율(등급 판단)에, 지출 합계는 순잉여금 계산에 쓰입니다.";
+  }
+  ["l-income", "l-expense", "l-essential"].forEach(id => $(id).addEventListener("input", localPreview));
+  let previewTimer = null;           // 비정기 수입 배분은 서버 규칙으로 계산 (입력 멈춘 뒤 요청)
+  ["l-income", "l-expense", "l-essential", "l-irr", "l-irr-tax", "l-bal"].forEach(id => $(id).addEventListener("input", () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      try {
+        const r = await api(`/api/ledger/${period()}/preview`, { method: "POST", body: JSON.stringify(ledgerBody()) });
+        renderPreview(r.preview);
+      } catch (e) { /* 입력 중 오류는 저장 시 안내 */ }
+    }, 400);
+  }));
+
+  const ledgerBody = () => {
+    const v = id => getMoney(id);
+    return { monthly_income: v("l-income"), total_expense: v("l-expense"), essential_expense: v("l-essential"),
+             emergency_deposit: v("l-dep"), emergency_withdrawal: v("l-wd"), emergency_balance: v("l-bal"),
+             irregular_income: v("l-irr"), irregular_taxable: v("l-irr-tax") };
+  };
+  $("l-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    try {
+      const r = await api(`/api/ledger/${period()}`, { method: "PUT", body: JSON.stringify(ledgerBody()) });
+      renderPreview(r.preview);
+      formDirty = false;
+      $("l-toast").className = "toast"; $("l-toast").textContent = `${period()} 가계부를 저장했어요.`;
+    } catch (e) { $("l-toast").className = "toast error"; $("l-toast").textContent = e.message; }
+  });
+  $("l-close").addEventListener("click", async () => {
+    try {
+      await api(`/api/ledger/${period()}`, { method: "PUT", body: JSON.stringify(ledgerBody()) });
+      const r = await api(`/api/ledger/${period()}/close`, { method: "POST" });
+      $("l-toast").className = "toast";
+      $("l-toast").innerHTML = r.orders.length
+        ? `${period()} 월 마감을 실행했어요. 매매 제안 ${r.orders.length}건을 만들었어요. <button class="linkish" id="go-pr">매매 제안 보기</button>`
+        : `${period()} 월 마감을 실행했어요. 이번 달은 주문이 없어요.`;
+      const go = $("go-pr"); if (go) go.addEventListener("click", () => show("proposals"));
+      loadSummary();
+    } catch (e) { $("l-toast").className = "toast error"; $("l-toast").textContent = e.message; }
+  });
+
+  $("ev-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const k = formKind(), toast = $("ev-toast");
+    try {
+      let msg;
+      if (k === "plan") {
+        const e = await api("/api/events", { method: "POST", body: JSON.stringify({
+          name: $("ev-name").value.trim(), date: $("ev-date").value,
+          amount: getMoney("ev-amount") || 0, big: $("ev-big").checked }) });
+        msg = `지출 일정을 추가했어요: ${e.name} ${won(e.amount)}`;
+        selected = e.date;
+      } else {
+        const e = await api("/api/entries", { method: "POST", body: JSON.stringify({
+          kind: k, date: $("ev-date").value, amount: getMoney("ev-amount") || 0,
+          description: $("ev-name").value.trim(),
+          override: CLS_OPTIONS[k] ? $("ev-override").value : "auto", remember: $("ev-remember").checked }) });
+        msg = `기록했어요: ${e.description} ${won(e.amount)} → ${e.class}` +
+              (e.confidence === "확인 필요" ? " (자동 분류가 애매해요. 목록에서 분류를 확인해 주세요)" : "");
+        if (e.scan) {
+          msg += e.scan.active.length
+            ? ` · 큰 출금이라 즉시 스캔했어요: ${e.scan.active.map(k => "Trigger " + k).join(", ")} 발동 → 목표 비중 조절 모드 작동`
+            : " · 큰 출금이라 즉시 스캔했어요: 트리거 정상";
+          loadSummary(); loadMonitor();
+        }
+        selected = e.date;
+      }
+      const d = new Date(selected + "T00:00:00");
+      view = new Date(d.getFullYear(), d.getMonth(), 1);
+      $("ev-name").value = ""; $("ev-amount").value = ""; $("ev-big").checked = false; $("ev-remember").checked = false;
+      $("ev-date").value = selected;
+      toast.className = "toast"; toast.textContent = msg;
+      loadCalendar();
+    } catch (err) { toast.className = "toast error"; toast.textContent = err.message; }
+  });
+
+  $("c-prev").addEventListener("click", () => { view = new Date(view.getFullYear(), view.getMonth() - 1, 1); $("ev-date").value = ""; loadCalendar(); });
+  $("c-next").addEventListener("click", () => { view = new Date(view.getFullYear(), view.getMonth() + 1, 1); $("ev-date").value = ""; loadCalendar(); });
+  $("c-today").addEventListener("click", () => { view = new Date(today.getFullYear(), today.getMonth(), 1); selected = summary.today; $("ev-date").value = ""; loadCalendar(); });
+
+  /* ── 매매 제안 (주문 보안) ───────────────────── */
+  const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+  const fmtTime = iso => new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  async function loadSecurity() {
+    const [sec, st] = await Promise.all([api("/api/security"), api("/api/storage")]);
+    const store = !st.path ? `<span class="kv">데이터 저장 <b>꺼짐</b> (서버를 끄면 사라져요)</span>`
+      : st.error ? `<span class="kv" style="color:var(--red)">저장 실패: ${esc(st.error)}</span>`
+      : `<span class="kv">데이터 저장 <b>켜짐</b>${st.lastSaved ? ` · 마지막 저장 ${fmtTime(st.lastSaved)}` : ""}</span>`;
+    const L = sec.limits;
+    const halt = sec.halted
+      ? `<input id="halt-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="주문 PIN" aria-label="해제용 주문 PIN">
+         <button class="secondary" type="button" id="halt-off">긴급 정지 해제</button>`
+      : `<button class="danger-btn" type="button" id="halt-on">긴급 정지</button>`;
+    return `<section class="panel sec" aria-labelledby="sec-title">
+      <div class="sec-row"><h2 id="sec-title" style="margin:0">주문 보안</h2><div class="halt">${halt}</div></div>
+      ${sec.halted ? `<p class="banner" role="alert">긴급 정지 중 — 모든 승인·발주가 멈춰 있어요. (${esc(sec.haltReason)})</p>` : ""}
+      <div class="sec-row">
+        <span class="kv">1회 한도 <b>${won(L.perOrder)}</b></span>
+        <span class="kv">1일 한도 <b>${won(L.daily)}</b> (오늘 사용 <b>${won(sec.dailyUsed)}</b>)</span>
+        <span class="kv">추가 인증 <b>${won(L.stepUp)}</b> 이상 또는 평소의 ${L.stepUpMult}배</span>
+        <span class="kv">제안 유효 <b>${L.proposalTtlHours}시간</b></span>
+        <span class="kv">주문 권한 <b>${sec.canTrade ? "연결됨" : "없음"}</b></span>
+        ${store}
+      </div>
+      <p class="toast" id="halt-msg" role="status"></p>
+      <details><summary>감사 기록 ${sec.auditValid ? "(무결성 확인됨)" : "(⚠ 무결성 검증 실패)"}</summary>
+        <pre>${esc(sec.audit.map(a => `${a.at}  ${a.event}  ${JSON.stringify(a.detail)}`).join("\n") || "기록 없음")}</pre>
+      </details>
+    </section>`;
+  }
+
+  function proposalHtml(p) {
+    const g = p.guard;
+    let guard = "";
+    if (g && !g.allowed) guard = `<div class="guard block">차단됨: ${g.reasons.map(esc).join(" / ")}</div>`;
+    else if (g && g.stepUp) guard = `<div class="guard">추가 인증이 필요한 주문이에요: ${g.reasons.map(esc).join(" / ")}</div>
+      <div class="stepup"><label style="display:flex;gap:8px;align-items:center;color:var(--ink)">주문 PIN
+        <input type="password" inputmode="numeric" autocomplete="off" data-pin="${p.id}"></label></div>`;
+    const waiting = p.status === "승인 대기";
+    const late = waiting && p.lateSells && p.lateSells.length
+      ? `<div class="guard block" role="alert">지금 승인하면 목돈 지출일까지 대금이 들어오지 않는 매도가 있어요:
+          ${p.lateSells.map(x => `${esc(x.name)} (대금 ${mdLabel(x.cashDate)} &gt; 지출일 ${mdLabel(x.dueDate)})`).join(", ")}.
+          승인하려면 한 번 더 확인해야 해요. 거절하고 월 마감·지금 스캔으로 새 제안을 받는 방법도 있어요.</div>` : "";
+    return `<article class="panel proposal">
+      <header><h2 style="margin:0">${p.period} ${esc(p.origin || "월 마감")} 제안</h2>
+        <span class="status ${waiting ? "wait" : p.status === "승인 완료" ? "done" : ""}">${p.status}</span>
+        <span class="num" style="margin-left:auto;font-weight:600">합계 ${won(p.total)}</span></header>
+      <div class="meta"><span>지문 <code title="${p.fingerprint}">${p.fingerprint.slice(0, 12)}…</code></span>
+        <span>생성 ${fmtTime(p.createdAt)}</span>${waiting ? `<span>승인 기한 ${fmtTime(p.expiresAt)}</span>` : ""}</div>
+      ${p.orders.length ? `<div class="scroll"><table><thead><tr><th>시점</th><th>구분</th><th>종목</th><th class="r">수량</th><th class="r">금액</th><th>계좌</th><th>사유</th></tr></thead><tbody>
+        ${p.orders.map(o => `<tr><td>${o.execDate ? `${mdLabel(o.execDate)} <span class="muted">T+${o.day}</span>` : `T+${o.day}`}${o.cashDate && o.cashDate !== o.execDate ? `<br><span class="${o.late ? "" : "muted"}" style="${o.late ? "color:var(--red);font-weight:600" : ""}">대금 ${mdLabel(o.cashDate)}${o.late ? ` · 지출일 ${mdLabel(o.dueDate)} 초과` : ""}</span>` : ""}</td><td>${o.side}</td><td>${esc(o.name)}</td>
+          <td class="r num">${o.assetClass === "현금성자산" ? "이체" : Number(o.quantity).toLocaleString("ko-KR")}</td>
+          <td class="r num">${won(o.amount)}</td><td>${esc(o.account || "-")}</td><td class="muted">${esc(o.reason)}${o.purpose ? " · " + esc(o.purpose) : ""}</td></tr>`).join("")}
+        </tbody></table></div>` : `<p class="muted">이번 달은 매매할 주문이 없어요.</p>`}
+      ${late}
+      ${waiting ? guard : ""}
+      ${waiting ? `<div class="actions" style="margin-top:12px;max-width:360px">
+        <button class="secondary" data-act="reject" data-id="${p.id}" data-fp="${p.fingerprint}">거절</button>
+        <button class="primary" data-act="approve" data-id="${p.id}" data-fp="${p.fingerprint}" ${g && !g.allowed ? "disabled" : ""}>승인하고 발주</button></div>
+        <p class="toast" data-msg="${p.id}" role="status"></p>` : ""}
+      ${p.results && p.results.length ? `<ul class="results">${p.results.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+      <details><summary>판단 근거 보기</summary><pre>${esc(p.log.join("\n"))}</pre></details>
+    </article>`;
+  }
+
+  async function loadProposals() {
+    const [secHtml, list] = await Promise.all([loadSecurity(), api("/api/proposals")]);
+    const box = $("pr-list");
+    box.innerHTML = secHtml + (list.length ? list.map(proposalHtml).join("")
+      : `<div class="panel empty">아직 매매 제안이 없어요. 가계부 탭에서 월 마감을 실행하면 이번 달 제안이 만들어집니다.</div>`);
+
+    const on = $("halt-on"), off = $("halt-off");
+    if (on) on.addEventListener("click", async () => {
+      const reason = prompt("긴급 정지 사유를 적어 주세요 (선택)") || "사용자 긴급 정지";
+      await api("/api/kill-switch", { method: "POST", body: JSON.stringify({ on: true, reason }) });
+      loadProposals();
+    });
+    if (off) off.addEventListener("click", async () => {
+      try { await api("/api/kill-switch", { method: "POST", body: JSON.stringify({ on: false, pin: $("halt-pin").value }) }); loadProposals(); }
+      catch (e) { $("halt-msg").className = "toast error"; $("halt-msg").textContent = e.message; }
+    });
+
+    box.querySelectorAll("[data-act]").forEach(b => b.addEventListener("click", async () => {
+      const id = b.dataset.id, msg = box.querySelector(`[data-msg="${id}"]`);
+      const pinEl = box.querySelector(`[data-pin="${id}"]`);
+      box.querySelectorAll(`[data-id="${id}"]`).forEach(x => { x.disabled = true; });   // 두 번 누르기 방지
+      const key = newKey();
+      const body = { fingerprint: b.dataset.fp, pin: pinEl ? pinEl.value : undefined };
+      const send = () => fetch(`/api/proposals/${id}/${b.dataset.act}`, {
+        method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(body) });
+      let res = await send();
+      let data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.needsAck) {
+        // 승인 시점 재계산 결과 지출일을 넘기는 매도 → 한 번 더 확인
+        const lines = data.lateSells.map(x => `· ${x.name} ${won(x.amount)}: 대금 ${mdLabel(x.cashDate)}, 지출일 ${mdLabel(x.dueDate)}`).join("\n");
+        if (confirm(`${data.error}\n\n${lines}\n\n그래도 승인할까요?`)) {
+          body.acceptLate = true;
+          res = await send();
+          data = await res.json().catch(() => ({}));
+        } else {
+          data = { error: "승인을 취소했어요. 거절하거나 새 제안을 받아 주세요." };
+        }
+      }
+      if (!res.ok) {
+        msg.className = "toast error";
+        msg.textContent = (data.error || "요청이 실패했어요.") + (data.reasons ? " — " + data.reasons.join(" / ") : "");
+        box.querySelectorAll(`[data-id="${id}"]`).forEach(x => { x.disabled = false; });
+        if (data.stepUp && pinEl) { pinEl.value = ""; pinEl.focus(); }
+        return;
+      }
+      await loadSummary(); loadProposals();
+    }));
+  }
+
+  /* ── 성향 진단 ──────────────────────────────── */
+  let onboard = null, lastInput = null;
+  async function loadOnboarding() {
+    if (onboard) return;
+    onboard = await api("/api/onboarding");
+    const cur = onboard.current;
+    $("dg-type").innerHTML = onboard.incomeTypes.map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join("");
+    const fillM = (sel) => {
+      const t = onboard.incomeTypes.find(x => x.key === $("dg-type").value);
+      const ms = []; for (let m = t.mMin; m <= t.mMax; m++) ms.push(m);
+      $("dg-m").innerHTML = ms.map(m => `<option value="${m}">필수 지출 ${m}개월 치</option>`).join("");
+      if (sel && ms.includes(sel)) $("dg-m").value = sel;
+    };
+    $("dg-type").value = cur.income_type; fillM(cur.m_multiplier);
+    $("dg-type").addEventListener("change", () => { fillM(); invalidate(); });
+    setMoney("dg-income", cur.monthly_fixed_income); setMoney("dg-irr", cur.monthly_irregular_income || "");
+    setMoney("dg-ess", cur.essential_expense); setMoney("dg-debt", cur.monthly_debt_payment || "");
+    setMoney("dg-cash", cur.cash_current);
+    $("dg-qs").insertAdjacentHTML("beforeend", onboard.questions.map((q, i) => `
+      <div class="q" role="radiogroup" aria-labelledby="q-${q.key}">
+        <p id="q-${q.key}">Q${i + 1}. ${esc(q.title)}<span class="w">${q.group} 가중치 ${q.weight * 100}%</span></p>
+        <div class="opts">${q.options.map(o => `<label class="opt"><input type="radio" name="${q.key}" value="${o.score}"
+          ${cur.answers[q.key] === o.score ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}</div>
+      </div>`).join(""));
+    const G = cur.goals || {};
+    [["gl-birth", "birth_year"], ["gl-retire", "retirement_age"], ["gl-home-year", "home_year"],
+     ["gl-home-share", "home_share"], ["gl-other-name", "other_name"], ["gl-other-year", "other_year"],
+     ["gl-other-share", "other_share"]].forEach(([id, k]) => { $(id).value = G[k] ?? ""; });
+    $("dg-goals").addEventListener("input", goalHint);
+    goalHint();
+    $("dg-form").addEventListener("input", invalidate);
+  }
+  function goalHint() {
+    const n = id => Number($(id).value) || 0;
+    const rest = 100 - n("gl-home-share") - n("gl-other-share"), birth = n("gl-birth"), age = n("gl-retire");
+    const h = $("gl-hint");
+    if (rest < 0) { h.className = "hint error"; h.textContent = "목표별 비율 합계가 100%를 넘었어요."; return; }
+    h.className = "hint";
+    h.textContent = !birth ? "출생 연도를 비워 두면 목표 시점 없이 설문 답만으로 판단해요."
+      : `나머지 ${rest}%는 ${age ? `은퇴 자금(${birth + age}년, ${birth + age - new Date().getFullYear()}년 남음)` : "목표 시점이 없는 장기 자금"}으로 봐요.`;
+  }
+  function invalidate() { $("dg-apply").disabled = true; }
+
+  function diagInput() {
+    const v = id => getMoney(id);
+    const answers = {};
+    onboard.questions.forEach(q => { const c = document.querySelector(`input[name="${q.key}"]:checked`); if (c) answers[q.key] = Number(c.value); });
+    const g = id => $(id).value.trim();
+    const goals = { birth_year: g("gl-birth"), retirement_age: g("gl-retire"), home_year: g("gl-home-year"),
+                    home_share: g("gl-home-share"), other_name: g("gl-other-name"), other_year: g("gl-other-year"),
+                    other_share: g("gl-other-share") };
+    return { monthly_fixed_income: v("dg-income"), monthly_irregular_income: v("dg-irr"), essential_expense: v("dg-ess"),
+             monthly_debt_payment: v("dg-debt"), cash_current: v("dg-cash"), income_type: $("dg-type").value,
+             m_multiplier: Number($("dg-m").value), answers, goals };
+  }
+
+  function renderDiag(r) {
+    const s1 = r.stage1, pct = n => `${n}%`;
+    const row = (a, b, cls = "") => `<div class="${cls}"><span>${a}</span><span>${b}</span></div>`;
+    const bands = [["보수형", 0, 20], ["안정추구형", 20, 40], ["위험중립형", 40, 60], ["적극투자형", 60, 80], ["공격투자형", 80, 100]];
+    const partRows = parts => parts.map(p => row(`${p.key.toUpperCase().replace("_", "-")} ${esc(p.label)}`,
+      `${p.score} × ${p.weight.toFixed(2)} = ${(p.score * p.weight).toFixed(1)}`)).join("");
+    $("dg-result").innerHTML = `
+      <div class="result-head"><h1>Tier ${r.final.tier} ${esc(r.final.name)}</h1>
+        <span class="muted num">최종 ${r.final.score}점 · ${esc(r.final.range)}</span></div>
+      <div class="scale" aria-hidden="true">
+        ${bands.map((b, i) => `<span class="${i + 1 === r.final.tier ? "on" : ""}">${b[0]}<br>${b[1]}~${b[2]}</span>`).join("")}
+        <i class="mark" style="left:${Math.min(100, Math.max(0, r.final.score))}%" data-v="${r.final.score}점"></i>
+      </div>
+
+      <section class="step"><h3>STAGE 1 · 재무 체력</h3><div class="calc">
+        ${row("월 순잉여금 (고정 수입 − 필수 지출)", won(s1.freeCash))}
+        ${row("재무 잉여율 Buffer", pct(s1.buffer))}
+        ${row("DTI (월 대출 원리금 ÷ 월 소득)", s1.dti == null ? "-" : pct(s1.dti))}
+        ${row("DTI 위험 보정금 (DTI 40% 이상이면 원리금 × 2)", won(s1.adjDebt))}
+        ${row(`필수 비상금 (필수 지출 × ${s1.m}개월 + 보정금)`, won(s1.reserve), "sum")}
+        ${row("현금성 자산 중 투자 가능 금액", s1.deployable >= 0 ? won(s1.deployable) : `비상금 부족 (${won(-s1.deployable)} 더 필요)`)}
+      </div></section>
+
+      <section class="step"><h3>① 심리적 손실 감내 점수 Tol</h3><div class="calc">
+        ${partRows(r.tol.parts)}${row("Tol", r.tol.value, "sum")}</div></section>
+
+      <section class="step"><h3>② 투자 기간 점수 Horizon</h3><div class="calc">
+        ${partRows(r.horizon.parts)}${row("Horizon", r.horizon.value, "sum")}</div></section>
+
+      <section class="step"><h3>③ 재무 잉여율 점수 Buffer</h3><div class="calc">
+        ${row("Buffer (0~100점으로 맞춤)", `${r.bufferScore.raw}% → ${r.bufferScore.value}점`, "sum")}</div></section>
+
+      <section class="step"><h3>④ 기본 위험 점수</h3><div class="calc">
+        ${r.base.terms.map(t => row(`${t.weight} × ${t.name}`, `${t.weight} × ${t.value} = ${(t.weight * t.value).toFixed(1)}`)).join("")}
+        ${row("RiskScore_base", r.base.value, "sum")}</div></section>
+
+      <section class="step"><h3>⑤ 2단계 가드레일 (가장 낮은 값이 최종 점수)</h3>
+        <div class="cap ${r.caps.binding === "기본 점수" ? "bind" : ""}"><span>기본 점수</span><span class="num">${r.base.value}</span></div>
+        <div class="cap ${r.caps.binding === "재무 상한" ? "bind" : ""}"><span>재무 상한 — ${esc(r.caps.financialRule)}</span><span class="num">${r.caps.financial}</span></div>
+        <div class="cap ${r.caps.binding === "심리 상한" ? "bind" : ""}"><span>심리 상한 — ${esc(r.caps.psychologicalRule)}</span><span class="num">${r.caps.psychological}</span></div>
+        <p class="hint" style="margin-top:6px">적용된 기준: <b>${esc(r.caps.binding)}</b> → 최종 ${r.final.score}점</p>
+      </section>
+
+      ${goalSection(r)}
+
+      <section class="step"><h3>목표 포트폴리오 — ${esc(r.portfolio.name)}${r.goals && r.goals.adjusted ? " (목표 시점 반영 전)" : ""}</h3>
+        <p class="hint" style="margin-bottom:8px">${esc(r.portfolio.purpose)}</p>
+        <div class="scroll"><table><thead><tr><th>세부 항목</th><th>자산군</th><th class="r">비중</th></tr></thead><tbody>
+          ${r.portfolio.items.map(i => `<tr><td>${esc(i.name)}</td><td>${esc(i.assetClass)}</td><td class="r num">${i.weight}%</td></tr>`).join("")}
+        </tbody></table></div>
+      </section>`;
+  }
+
+  function goalSection(r) {
+    const G = r.goals;
+    if (!G) return "";
+    const row = (a, b, cls = "") => `<div class="${cls}"><span>${a}</span><span>${b}</span></div>`;
+    const when = b => b.years == null ? "시점 미정" : b.retired ? "은퇴 이후" : `${b.years}년 남음`;
+    return `<section class="step"><h3>⑥ 나이와 목표 시점 반영</h3>
+      <p class="hint" style="margin-bottom:8px">현재 ${G.age}세${G.retirementAge ? ` · 은퇴 목표 ${G.retirementAge}세 (${G.retirementYear}년)` : ""}.
+        목표까지 남은 기간이 짧은 자금일수록 최대 등급을 낮춰 섞어요. 매년 재평가 때 남은 기간을 다시 계산합니다.</p>
+      ${G.passed.length ? `<p class="hint error">목표 연도가 지난 항목: ${G.passed.map(esc).join(", ")} — 목표를 갱신해 주세요.</p>` : ""}
+      <div class="scroll"><table><thead><tr><th>목표 자금</th><th class="r">비율</th><th>남은 기간</th><th>최대 등급</th><th>적용 등급</th></tr></thead><tbody>
+        ${G.buckets.map(b => `<tr><td>${esc(b.name)}</td><td class="r num">${b.share}%</td><td>${when(b)}</td>
+          <td>${b.cap >= 5 ? "제한 없음" : `Tier ${b.cap}`}</td><td>Tier ${b.appliedTier} ${esc(b.appliedName)}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="calc" style="margin-top:8px">
+        ${row("목표 비율로 가중한 투자 기간 점수", G.goalScore)}
+        ${row("설문 Q2-1 투자 기간 점수", G.q2_1)}
+        ${row("Horizon 계산에 쓴 점수 (둘 중 짧은 쪽)", G.used, "sum")}
+      </div>
+      <p class="hint" style="margin:10px 0 6px">자산군별 목표 비중 — 등급 모델 그대로 vs 목표 시점 반영</p>
+      <div class="scroll"><table><thead><tr><th>자산군</th><th class="r">Tier ${r.final.tier} 모델</th><th class="r">실제 목표 비중</th></tr></thead><tbody>
+        ${G.targets.map(t => `<tr><td>${esc(t.name)}</td><td class="r num">${t.model}%</td>
+          <td class="r num ${Math.abs(t.model - t.blended) > 0.05 ? "changed" : ""}">${t.blended}%</td></tr>`).join("")}
+      </tbody></table></div>
+    </section>`;
+  }
+
+  $("dg-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    try {
+      lastInput = diagInput();
+      renderDiag(await api("/api/onboarding/evaluate", { method: "POST", body: JSON.stringify(lastInput) }));
+      $("dg-apply").disabled = false;
+      $("dg-toast").className = "toast"; $("dg-toast").textContent = "진단했어요. 결과가 맞으면 '내 등급으로 적용'을 눌러 주세요.";
+    } catch (e) { $("dg-toast").className = "toast error"; $("dg-toast").textContent = e.message; $("dg-apply").disabled = true; }
+  });
+  $("dg-apply").addEventListener("click", async () => {
+    if (!confirm("이 결과로 투자 등급과 목표 비중을 바꿀까요? 승인 대기 중인 매매 제안은 만료돼요.")) return;
+    try {
+      const r = await api("/api/onboarding/apply", { method: "POST", body: JSON.stringify(lastInput) });
+      $("dg-apply").disabled = true;
+      $("dg-toast").className = "toast";
+      $("dg-toast").textContent = `Tier ${r.result.final.tier} ${r.result.final.name}으로 적용했어요.` +
+        (r.expiredProposals ? ` 대기 중이던 매매 제안 ${r.expiredProposals}건은 만료됐어요.` : "");
+      loadSummary();
+    } catch (e) { $("dg-toast").className = "toast error"; $("dg-toast").textContent = e.message; }
+  });
+
+  /* ── 시연 모드 ─────────────────────────────── */
+  (async () => {
+    try {
+      const d = await api("/api/demo");
+      if (!d.demo) return;
+      $("demo-bar").hidden = false;
+      $("demo-reset").addEventListener("click", async () => {
+        const pin = prompt("발표자용 기능이에요. 주문 PIN을 입력하면 모든 데이터가 처음 데모 상태로 돌아가요.");
+        if (!pin) return;
+        const res = await fetch("/api/demo/reset", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                      body: JSON.stringify({ pin }) });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(j.error || "되돌리지 못했어요."); return; }
+        location.reload();
+      });
+    } catch (e) { console.warn("시연 모드 확인 실패:", e); }
+  })();
+
+  /* ── 시작 ───────────────────────────────────── */
+  const start = (location.hash || "#home").slice(1);
+  api("/api/triggers/scan", { method: "POST", body: JSON.stringify({ source: "app_open" }) })
+    .catch(() => null)
+    .then(() => loadSummary())
+    .then(() => { show(["home", "profile", "ledger", "portfolio", "proposals"].includes(start) ? start : "home");
+                  if (start !== "home") loadMonitor(); })
+    .catch(e => { document.querySelector("main").innerHTML = `<div class="panel empty error">서버에 연결하지 못했어요: ${esc(e.message)}</div>`; });
+})();
+
+</script>
+</body>
+</html>

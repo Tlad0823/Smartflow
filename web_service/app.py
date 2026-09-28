@@ -43,6 +43,27 @@ _lock = threading.Lock()
 # ════════════════════════════════════════════════════════════════════
 # 서비스 상태 (1명 사용자, SQLite 저장: storage.py)
 # ════════════════════════════════════════════════════════════════════
+def _order_pin() -> str:
+    """
+    주문 PIN: ORDER_PIN 환경 변수.
+    시연 모드인데 설정을 빠뜨렸으면, 코드에 적힌 기본 PIN 대신 무작위 PIN 을 만들어 서버 로그에만 남김
+    """
+    pin = os.environ.get("ORDER_PIN")
+    if pin:
+        return pin
+    if DEMO:
+        global _GENERATED_PIN
+        if _GENERATED_PIN is None:
+            import secrets
+            _GENERATED_PIN = f"{secrets.randbelow(10**6):06d}"
+            print(f"[안내] ORDER_PIN 이 설정되지 않아 이번 실행용 주문 PIN 을 만들었어요: {_GENERATED_PIN}", flush=True)
+        return _GENERATED_PIN
+    return "135790"                                  # 내 PC 개발용 기본값 — 공개 서버에서는 쓰이지 않음
+
+
+_GENERATED_PIN = None
+
+
 class ServiceState:
     # 저장하지 않고 켤 때마다 환경 변수로 다시 만드는 항목 (토큰·PIN)
     RUNTIME = ("broker", "pin")
@@ -93,7 +114,7 @@ class ServiceState:
         # 한국(공휴일 API·KRX 규정)·미국(NYSE 규칙) 증시 달력 → 엔진의 T+N 정산일·매도 후보·매수 집행일 계산에 사용
         closures = os.path.join(os.path.dirname(os.path.abspath(__file__)), "market_closures.json")
         pe.set_market_calendar(pe.MarketCalendar.with_closure_file(self.calendar, closures))
-        self.pin = PinVerifier(os.environ.get("ORDER_PIN", "135790"), clock=pe.clock_now)      # 데모 PIN — 운영 시 반드시 변경
+        self.pin = PinVerifier(_order_pin(), clock=pe.clock_now)
         for k, v in (pin_state or {}).items():      # 연속 실패·잠금 상태는 재시작해도 유지
             setattr(self.pin, k, v)
         self.broker = ScopedBroker(pe.MockBroker(), os.environ.get("BROKER_READ_TOKEN", "demo-read"),

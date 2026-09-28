@@ -15,6 +15,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 os.environ.pop("HOLIDAY_API_KEY", None)
 os.environ.pop("PORTFOLIO_TODAY", None)
+os.environ["ORDER_PIN"] = "135790"            # 테스트용 PIN (시연 모드의 무작위 PIN 대신 고정값)
 os.environ["PORTFOLIO_DB"] = "off"            # 테스트는 실제 DB를 건드리지 않음 (저장 테스트는 임시 파일 사용)
 warnings.filterwarnings("ignore")
 

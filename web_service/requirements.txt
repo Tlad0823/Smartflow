@@ -1,2 +1,4 @@
 flask>=3.0
 cryptography>=42
+tzdata>=2024.1                                   # 한국 시간대 데이터 (Windows 등 시간대 정보가 없는 환경용)
+gunicorn>=22; platform_system != "Windows"       # 서버용 실행기 (Render 에서 사용, Windows 에서는 설치 안 함)

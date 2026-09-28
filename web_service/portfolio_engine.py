@@ -40,9 +40,21 @@ class Clock:
         return self.now().date()
 
 
+APP_TZ = os.environ.get("APP_TZ", "Asia/Seoul")      # 프로그램 기준 시간대 (서버가 어느 나라에 있든 한국 시간)
+
+
+def _local_now() -> datetime:
+    """한국 시간(APP_TZ) 기준 현재 시각 — 클라우드 서버는 보통 UTC 로 돌아가서 그대로 쓰면 9시간 어긋남"""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(APP_TZ)).replace(tzinfo=None)
+    except Exception:                                   # 시간대 데이터가 없는 환경: 컴퓨터 시계 그대로
+        return datetime.now()
+
+
 class SystemClock(Clock):
     def now(self) -> datetime:
-        return datetime.now()
+        return _local_now()
 
 
 class FixedClock(Clock):
@@ -65,11 +77,11 @@ class OffsetClock(Clock):
     """시스템 시계를 특정 날짜로 옮긴 시계 — 시간은 실제처럼 흐름 (모의 날짜로 서버 실행)"""
 
     def __init__(self, start):
-        start = start if isinstance(start, datetime) else datetime.combine(start, datetime.now().time())
-        self.offset = start - datetime.now()
+        start = start if isinstance(start, datetime) else datetime.combine(start, _local_now().time())
+        self.offset = start - _local_now()
 
     def now(self) -> datetime:
-        return datetime.now() + self.offset
+        return _local_now() + self.offset
 
 
 _CLOCK: Clock = SystemClock()

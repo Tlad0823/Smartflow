@@ -1,0 +1,19 @@
+# Render 배포 설정 (Blueprint)
+# Render 대시보드 → New → Blueprint → 이 저장소 선택 → ORDER_PIN 입력 → Apply
+services:
+  - type: web
+    name: portfolio-demo              # 링크 주소가 됨: https://portfolio-demo(-xxxx).onrender.com
+    runtime: python
+    plan: free                        # 무료: 15분 동안 접속이 없으면 잠들고, 다음 접속 때 1분 정도 걸려 깨어남
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/demo
+    envVars:
+      - key: PORTFOLIO_DEMO           # 시연 모드: 데모 데이터로 메모리에서만 동작, 화면 위 안내, 초기화 버튼
+        value: "1"
+      - key: PORTFOLIO_DB             # 서버에는 데이터를 저장하지 않음 (무료 서버는 재시작하면 파일이 지워짐)
+        value: "off"
+      - key: APP_TZ                   # 한국 시간 기준으로 날짜·장 시간·07:00 스캔 계산
+        value: Asia/Seoul
+      - key: ORDER_PIN                # 주문 PIN: 처음 배포할 때 Render 화면에서 직접 입력 (코드에 적지 않음)
+        sync: false
